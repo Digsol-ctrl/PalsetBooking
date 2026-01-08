@@ -1,0 +1,85 @@
+from typing import Tuple
+import logging
+import requests
+from django.core.cache import cache
+from django.conf import settings
+
+logger = logging.getLogger(__name__)
+
+
+class DistanceService:
+    """DistanceService implementation using Google Distance Matrix API with server-side caching.
+
+    Public method:
+        get_distance_km(origin: Tuple[float,float], destination: Tuple[float,float], use_cache: bool = True) -> float
+
+    Caching:
+        Stores results in Django cache under key `distance:{lat1:.6f}:{lng1:.6f}:{lat2:.6f}:{lng2:.6f}`
+        Timeout controlled with `settings.GOOGLE_DISTANCE_CACHE_TIMEOUT` (seconds).
+    """
+
+    @staticmethod
+    def _cache_key(lat1: float, lng1: float, lat2: float, lng2: float) -> str:
+        return f"distance:{lat1:.6f}:{lng1:.6f}:{lat2:.6f}:{lng2:.6f}"
+
+    @staticmethod
+    def get_distance_km(origin: Tuple[float, float], destination: Tuple[float, float], use_cache: bool = True) -> float:
+        if not origin or not destination or len(origin) != 2 or len(destination) != 2:
+            raise ValueError("origin and destination must be (lat, lng) tuples")
+
+        if not settings.GOOGLE_MAPS_API_KEY:
+            raise RuntimeError("GOOGLE_MAPS_API_KEY is not configured in settings")
+
+        lat1, lng1 = float(origin[0]), float(origin[1])
+        lat2, lng2 = float(destination[0]), float(destination[1])
+
+        key = DistanceService._cache_key(lat1, lng1, lat2, lng2)
+        if use_cache:
+            cached = cache.get(key)
+            if cached is not None:
+                logger.debug("distance cache hit for %s -> %s = %s km", origin, destination, cached)
+                return float(cached)
+
+        url = "https://maps.googleapis.com/maps/api/distancematrix/json"
+        params = {
+            "units": "metric",
+            "origins": f"{lat1},{lng1}",
+            "destinations": f"{lat2},{lng2}",
+            "key": settings.GOOGLE_MAPS_API_KEY,
+        }
+
+        try:
+            resp = requests.get(url, params=params, timeout=10)
+            resp.raise_for_status()
+            data = resp.json()
+        except requests.RequestException as exc:
+            logger.exception("Google Distance Matrix request failed")
+            raise RuntimeError(f"Error calling Google Distance Matrix API: {exc}")
+
+        if data.get("status") != "OK":
+            logger.error("Google API returned non-OK status: %s", data)
+            raise RuntimeError(f"Google Distance Matrix API error: {data.get('status')}")
+
+        try:
+            element = data["rows"][0]["elements"][0]
+        except Exception as exc:
+            logger.exception("Unexpected Distance Matrix response format")
+            raise RuntimeError("Unexpected Distance Matrix response format") from exc
+
+        if element.get("status") != "OK":
+            logger.error("Element status not OK: %s", element)
+            raise RuntimeError(f"Route not available: {element.get('status')}")
+
+        meters = element["distance"]["value"]
+        distance_km = float(meters) / 1000.0
+
+        # Cache result
+        timeout = getattr(settings, "GOOGLE_DISTANCE_CACHE_TIMEOUT", 6 * 3600)
+        try:
+            cache.set(key, distance_km, timeout=timeout)
+        except Exception:
+            logger.exception("Failed to set distance cache (non-fatal)")
+
+        logger.debug("Computed distance %s km for %s -> %s", distance_km, origin, destination)
+        return distance_km
+

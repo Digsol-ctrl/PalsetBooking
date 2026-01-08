@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Paynow Debug Response</title>
+  <style>body{font-family:Arial,Helvetica,sans-serif;margin:0;padding:12px} .notice{background:#fff3cd;border:1px solid #ffeeba;padding:10px;margin-bottom:12px} iframe{width:100%;height:80vh;border:1px solid #ccc}</style>
+</head>
+<body>
+  <div class="notice">
+    <strong>Debug:</strong> Paynow returned an HTML response (no redirect URL). The page below attempts to render it with a <code>&lt;base&gt;</code> pointing to Paynow so relative assets load.
+  </div>
+
+  <iframe sandbox="allow-forms allow-scripts allow-same-origin" srcdoc="{{ base_tag|safe }}{{ raw_html|safe }}"></iframe>
+
+  <h3>Raw response (for debugging)</h3>
+  <pre style="white-space:pre-wrap;max-height:30vh;overflow:auto;border:1px solid #eee;padding:8px;background:#fafafa">{{ raw_html|escape }}</pre>
+
+  <p>If the embedded page doesn't load correctly, check your Paynow credentials, the callback URLs, and run the curl test suggested in the README or in the logs.</p>
+</body>
+</html>

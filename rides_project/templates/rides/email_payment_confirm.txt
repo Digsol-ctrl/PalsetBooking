@@ -1,0 +1,3 @@
+Payment successful for booking {{ booking.id }}.
+
+Thank you. Your booking is confirmed.

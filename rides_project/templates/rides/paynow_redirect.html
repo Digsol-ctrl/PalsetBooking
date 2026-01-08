@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Redirecting to Paynow</title>
+</head>
+<body>
+  <h1>Redirecting to payment</h1>
+  {% if redirect_url %}
+    <p>If you are not redirected automatically <a id="link" href="{{ redirect_url }}">click here to pay</a></p>
+    <script>window.location.href = "{{ redirect_url }}";</script>
+  {% else %}
+    <p>{{ message }}</p>
+  {% endif %}
+</body>
+</html>

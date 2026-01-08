@@ -1,0 +1,16 @@
+New ride booking: {{ booking.id }}
+
+Pickup: {{ booking.pickup_address }}
+Dropoff: {{ booking.dropoff_address }}
+Distance (km): {{ booking.distance_km }}
+
+Passengers: {{ booking.num_adults }} adults, {{ booking.num_kids_seated }} kids seated, {{ booking.num_kids_carried }} kids carried
+Luggage: {{ booking.luggage_count }} bags
+
+Total: ${{ booking.total_amount }}
+Payment status: {{ payment_status }}
+
+Customer phone: {{ booking.phone }} (tel:{{ booking.phone }})
+Customer email: {{ booking.email }}
+
+Please call the customer to coordinate pickup: tel:{{ booking.phone }}

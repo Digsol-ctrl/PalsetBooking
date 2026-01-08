@@ -1,0 +1,8 @@
+Django>=4.2
+djangorestframework
+mysqlclient
+python-dotenv
+requests
+pytest
+pytest-django
+psycopg2-binary # optional

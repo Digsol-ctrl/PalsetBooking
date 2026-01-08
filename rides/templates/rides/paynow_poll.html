@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Payment initiated — Paynow</title>
+  <style>
+    .btn{padding:10px 14px;background:#007acc;color:#fff;border:none;border-radius:4px;cursor:pointer}
+    .muted{color:#666;margin-top:12px}
+  </style>
+</head>
+<body>
+  <h1>Payment initiated</h1>
+  <p>{{ message }}</p>
+
+  {% if redirect_url and redirect_is_valid %}
+    <p><a id="open-paynow" class="btn" href="{{ redirect_url }}" target="_blank">Open Paynow to complete payment</a></p>
+  {% elif poll_url %}
+    <p><button id="open-paynow" class="btn" onclick="window.open('{{ poll_url }}','_blank')">Open Paynow</button></p>
+  {% else %}
+    <p class="muted">This payment needs to be completed via Paynow. If you need help, contact support.</p>
+  {% endif %}
+
+  <p><button id="check-now" class="btn">I've paid — Check now</button></p>
+
+  <p id="status-text" class="muted">Waiting for confirmation…</p>
+
+  <script>
+    (function(){
+      const paymentId = "{{ payment_id }}";
+      const bookingId = "{{ booking_id }}";
+      const statusEl = document.getElementById('status-text');
+      const checkUrl = `/rides/paynow/poll/${paymentId}/`;
+      let attempts = 0;
+      const maxAttempts = 20;
+      let timer = null;
+
+      function setStatus(t){ statusEl.textContent = t; }
+
+      function handleResult(json){
+        if(json.error){ setStatus('Error: ' + (json.message||json.error)); return; }
+        if(json.paid){
+          setStatus('Payment received — redirecting to confirmation...');
+          window.location.href = `/rides/bookings/success/${bookingId}/`;
+        } else {
+          setStatus('Payment still pending (' + (json.status || 'pending') + '). Checking again...');
+        }
+      }
+
+      async function checkStatus(){
+        attempts++;
+        try{
+          const res = await fetch(checkUrl, {cache:'no-cache'});
+          if(!res.ok){ const text = await res.text(); setStatus('Check failed: ' + res.status + ' ' + text); if(attempts>=maxAttempts) clearInterval(timer); return; }
+          const json = await res.json();
+          handleResult(json);
+          if(json.paid && timer) clearInterval(timer);
+          if(!json.paid && attempts>=maxAttempts){ clearInterval(timer); setStatus('Payment still pending — please check Paynow or contact support.'); }
+        }catch(e){ setStatus('Error checking status: ' + e.message); clearInterval(timer); }
+      }
+
+      document.getElementById('check-now').addEventListener('click', function(){ attempts=0; checkStatus(); });
+
+      // Start polling every 5s
+      timer = setInterval(checkStatus, 5000);
+      // Immediate check
+      checkStatus();
+    })();
+  </script>
+</body>
+</html>

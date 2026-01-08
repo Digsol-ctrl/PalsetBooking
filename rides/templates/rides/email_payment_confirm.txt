@@ -1,0 +1,8 @@
+Payment confirmed for booking {{ booking.id }}
+
+Thank you. Your payment has been received and the booking is confirmed.
+
+Details:
+Pickup: {{ booking.pickup_address }}
+Dropoff: {{ booking.dropoff_address }}
+Total: {{ booking.total_amount }}

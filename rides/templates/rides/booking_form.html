@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Book a Ride</title>
+    <script src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_MAPS_API_KEY }}&libraries=places"></script>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .form-row { margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+<h1>Book a Ride</h1>
+<form id="bookingForm" method="post" action="">
+    {% csrf_token %}
+    <div class="form-row">
+        <label>Pickup</label><br>
+        <input id="pickup" name="pickup_address" placeholder="Pickup location" size="60" required>
+        <input type="hidden" id="pickup_lat" name="pickup_lat" />
+        <input type="hidden" id="pickup_lng" name="pickup_lng" />
+    </div>
+    <div class="form-row">
+        <label>Dropoff</label><br>
+        <input id="dropoff" name="dropoff_address" placeholder="Dropoff location" size="60" required>
+        <input type="hidden" id="dropoff_lat" name="dropoff_lat" />
+        <input type="hidden" id="dropoff_lng" name="dropoff_lng" />
+    </div>
+    <div class="form-row">
+        <label>Distance (km)</label><br>
+        <input id="distance" name="distance_km" type="number" step="0.01" placeholder="Leave empty to calculate automatically">
+    </div>
+
+    <div class="form-row">
+        <label>Adults</label>
+        <input name="num_adults" type="number" value="1" min="1">
+    </div>
+
+    <div class="form-row">
+        <label>Kids (seated)</label>
+        <input name="num_kids_seated" type="number" value="0" min="0">
+    </div>
+
+    <div class="form-row">
+        <label>Kids (carried)</label>
+        <input name="num_kids_carried" type="number" value="0" min="0">
+    </div>
+
+    <div class="form-row">
+        <label>Luggage bags</label>
+        <input name="luggage_count" type="number" value="0" min="0">
+    </div>
+
+    <div class="form-row">
+        <label>Phone</label>
+        <input name="phone" required>
+    </div>
+    <div class="form-row">
+        <label>Email</label>
+        <input name="email" type="email" required>
+    </div>
+
+    <div class="form-row">
+        <label>Payment</label>
+        <select name="payment_option">
+            <option value="POA">Pay on Arrival</option>
+            <option value="PAYNOW">Pay Online (Paynow)</option>
+        </select>
+    </div>
+
+    <button type="submit">Book</button>
+</form>
+
+  <h3>Fare preview</h3>
+  <div id="fare_preview">Enter trip details to see a fare estimate</div>
+
+<script>
+function getCookie(name) {
+  const v = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
+  return v ? v.pop() : '';
+}
+
+function initAutocomplete() {
+    try{
+      var pickup = document.getElementById('pickup');
+      var dropoff = document.getElementById('dropoff');
+      var autocomplete1 = new google.maps.places.Autocomplete(pickup);
+      autocomplete1.addListener('place_changed', function(){
+        var p = autocomplete1.getPlace();
+        if(p && p.geometry){
+          document.getElementById('pickup_lat').value = p.geometry.location.lat();
+          document.getElementById('pickup_lng').value = p.geometry.location.lng();
+          schedulePreview();
+        }
+      });
+      var autocomplete2 = new google.maps.places.Autocomplete(dropoff);
+      autocomplete2.addListener('place_changed', function(){
+        var p = autocomplete2.getPlace();
+        if(p && p.geometry){
+          document.getElementById('dropoff_lat').value = p.geometry.location.lat();
+          document.getElementById('dropoff_lng').value = p.geometry.location.lng();
+          schedulePreview();
+        }
+      });
+
+      document.getElementById('distance').placeholder = 'Leave empty to calculate automatically';
+    } catch(e){ console.warn('Google Places not available', e) }
+}
+
+if (window.google && google.maps) {
+    initAutocomplete();
+}
+
+// Debounce utility
+function debounce(fn, wait){
+  let t = null;
+  return function(...args){
+    clearTimeout(t);
+    t = setTimeout(()=>fn.apply(this, args), wait);
+  };
+}
+
+async function fetchFarePreview(payload){
+  try{
+    const resp = await fetch('/rides/api/price/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCookie('csrftoken')
+      },
+      body: JSON.stringify(payload)
+    });
+    if(!resp.ok){
+      const err = await resp.json().catch(()=>({detail:'Error'}));
+      document.getElementById('fare_preview').innerText = 'Unable to estimate fare: ' + (err.detail || resp.statusText);
+      return;
+    }
+
+    const data = await resp.json();
+    renderPreview(data);
+  }catch(e){
+    console.warn('Preview error', e);
+    document.getElementById('fare_preview').innerText = 'Unable to estimate fare (network error)';
+  }
+}
+
+function renderPreview(data){
+  const el = document.getElementById('fare_preview');
+  el.innerHTML = `
+    <strong>Estimated fare: $${data.total.toFixed(2)}</strong><br/>
+    <small>Distance: ${data.distance_km} km (effective ${data.effective_distance_km} km)</small>
+    <ul>
+      <li>Base distance price: $${data.base_distance_price.toFixed(2)}</li>
+      <li>Extra adults: ${data.extra_adults} → $${data.extra_adults_fee.toFixed(2)}</li>
+      <li>Kids seated: ${data.kids_seated} → $${data.kids_seated_fee.toFixed(2)}</li>
+      <li>Luggage: ${data.luggage_count} → $${data.luggage_fee.toFixed(2)}</li>
+    </ul>
+  `;
+}
+
+function gatherPayload(){
+  const distance = document.getElementById('distance').value;
+  const payload = {
+    distance_km: distance ? parseFloat(distance) : null,
+    pickup_lat: parseFloat(document.getElementById('pickup_lat').value) || null,
+    pickup_lng: parseFloat(document.getElementById('pickup_lng').value) || null,
+    dropoff_lat: parseFloat(document.getElementById('dropoff_lat').value) || null,
+    dropoff_lng: parseFloat(document.getElementById('dropoff_lng').value) || null,
+    num_adults: parseInt(document.querySelector('[name="num_adults"]').value) || 1,
+    num_kids_seated: parseInt(document.querySelector('[name="num_kids_seated"]').value) || 0,
+    num_kids_carried: parseInt(document.querySelector('[name="num_kids_carried"]').value) || 0,
+    luggage_count: parseInt(document.querySelector('[name="luggage_count"]').value) || 0,
+  };
+  return payload;
+}
+
+const schedulePreview = debounce(()=>{
+  const payload = gatherPayload();
+  // If distance missing and coordinates missing, skip
+  if(!payload.distance_km && (!payload.pickup_lat || !payload.pickup_lng || !payload.dropoff_lat || !payload.dropoff_lng)){
+    document.getElementById('fare_preview').innerText = 'Enter addresses or distance to preview fare';
+    return;
+  }
+  document.getElementById('fare_preview').innerText = 'Calculating...';
+  fetchFarePreview(payload);
+}, 600);
+
+// Attach listeners
+['distance','pickup_lat','pickup_lng','dropoff_lat','dropoff_lng'].forEach(id=>{
+  const el = document.getElementById(id);
+  if(el) el.addEventListener('input', schedulePreview);
+});
+
+['num_adults','num_kids_seated','num_kids_carried','luggage_count'].forEach(name=>{
+  const el = document.querySelector('[name="'+name+'"]');
+  if(el) el.addEventListener('change', schedulePreview);
+});
+
+// initial preview attempt
+schedulePreview();
+
+// Modal markup (inserted in the DOM just after the form)
+// We create an accessible overlay and modal with confirm/cancel buttons.
+var modalHtml = `
+<div id="paynowModal" class="modal-overlay" role="dialog" aria-hidden="true" style="display:none;align-items:center;justify-content:center;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,0.5)">
+  <div class="modal" role="document" style="background:#fff;padding:18px;border-radius:6px;max-width:480px;width:90%;box-shadow:0 6px 24px rgba(0,0,0,.2);margin:auto;">
+    <h2 style="margin-top:0;font-size:18px">Continue to Paynow?</h2>
+    <p>You will be redirected to Paynow to complete payment. Continue?</p>
+    <div style="text-align:right;margin-top:16px;">
+      <button id="cancelPaynowBtn" type="button" style="margin-right:8px;">Cancel</button>
+      <button id="confirmPaynowBtn" type="button">Continue to Paynow</button>
+    </div>
+  </div>
+</div>`;
+
+// Insert the modal into the document just after the form
+try{
+  var formEl = document.getElementById('bookingForm');
+  if(formEl){
+    var frag = document.createElement('div');
+    frag.innerHTML = modalHtml;
+    formEl.parentNode.insertBefore(frag.firstElementChild, formEl.nextSibling);
+  }
+} catch(err){ console.warn('Failed to insert Paynow modal', err) }
+
+// Modal behavior
+(function(){
+  var modal = document.getElementById('paynowModal');
+  if(!modal) return;
+  var confirmBtn = document.getElementById('confirmPaynowBtn');
+  var cancelBtn = document.getElementById('cancelPaynowBtn');
+  var form = document.getElementById('bookingForm');
+  var submitBtn = form.querySelector('button[type="submit"]');
+  var submitting = false;
+
+  function showModal(){
+    modal.style.display = 'flex';
+    modal.setAttribute('aria-hidden','false');
+    confirmBtn.focus();
+  }
+  function hideModal(){
+    modal.style.display = 'none';
+    modal.setAttribute('aria-hidden','true');
+    submitBtn.focus();
+  }
+
+  form.addEventListener('submit', function(e){
+    try{
+      var payment = document.querySelector('[name="payment_option"]').value;
+      if(payment === 'PAYNOW' && !submitting){
+        e.preventDefault();
+        showModal();
+        return false;
+      }
+    }catch(err){
+      console.warn('Payment confirmation handler error', err);
+    }
+  });
+
+  confirmBtn.addEventListener('click', function(){
+    try{
+      submitting = true;
+      if(submitBtn){
+        submitBtn.disabled = true;
+        submitBtn.dataset._orig = submitBtn.innerText;
+        submitBtn.innerText = 'Proceeding to Paynow...';
+      }
+      hideModal();
+      // Use native submit to avoid re-triggering the modal
+      form.submit();
+    }catch(err){ console.warn(err); }
+  });
+
+  cancelBtn.addEventListener('click', function(){
+    hideModal();
+  });
+
+  // Close modal on overlay click or Escape key
+  modal.addEventListener('click', function(e){ if(e.target === modal) hideModal(); });
+  document.addEventListener('keydown', function(e){ if(e.key === 'Escape' && modal.getAttribute('aria-hidden') === 'false') hideModal(); });
+})();
+
+</script>
+</body>
+</html>

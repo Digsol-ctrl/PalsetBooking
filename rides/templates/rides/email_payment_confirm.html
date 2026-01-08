@@ -1,0 +1,9 @@
+<html>
+  <body>
+    <h2>Payment confirmed for booking {{ booking.id }}</h2>
+    <p>Thank you. Your payment has been received and the booking is confirmed.</p>
+    <p><strong>Pickup:</strong> {{ booking.pickup_address }}<br>
+    <strong>Dropoff:</strong> {{ booking.dropoff_address }}</p>
+    <p><strong>Total:</strong> {{ booking.total_amount }}</p>
+  </body>
+</html>
