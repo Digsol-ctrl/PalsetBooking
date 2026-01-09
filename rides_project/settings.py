@@ -1,3 +1,4 @@
+
 import os
 from pathlib import Path
 from dotenv import load_dotenv
@@ -85,25 +86,37 @@ WSGI_APPLICATION = "rides_project.wsgi.application"
     }
 } """
 
-if DEBUG:
+# DATABASES: prefer DATABASE_URL, then Postgres env vars, then sqlite fallback
+if os.getenv("DB_ENGINE", "").lower() == "sqlite":
     DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": str(BASE_DIR / "db.sqlite3"),
         }
     }
 else:
-    DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.environ.get('DB_NAME'),
-        'USER': os.environ.get('DB_USER'),
-        'PASSWORD': os.environ.get('DB_PASSWORD'),
-        'HOST': os.environ.get('DB_HOST'),
-        'PORT': '5432',
-    }
-}
-
+    DATABASE_URL = os.getenv("DATABASE_URL")
+    if DATABASE_URL:
+        DATABASES = {"default": dj_database_url.parse(DATABASE_URL)}
+    elif os.getenv("DB_NAME"):
+        DATABASES = {
+            "default": {
+                "ENGINE": "django.db.backends.postgresql",
+                "NAME": os.getenv("DB_NAME"),
+                "USER": os.getenv("DB_USER", ""),
+                "PASSWORD": os.getenv("DB_PASSWORD", ""),
+                "HOST": os.getenv("DB_HOST", "localhost"),
+                "PORT": os.getenv("DB_PORT", "5432"),
+            }
+        }
+    else:
+        # final fallback to local sqlite
+        DATABASES = {
+            "default": {
+                "ENGINE": "django.db.backends.sqlite3",
+                "NAME": str(BASE_DIR / "db.sqlite3"),
+            }
+        }
 
 # Optional: allow a simple sqlite fallback for local development and tests.
 # Set the environment variable DB_ENGINE=sqlite to enable this.
@@ -126,6 +139,7 @@ USE_TZ = True
 
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 
 # Email
