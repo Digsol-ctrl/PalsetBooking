@@ -8,10 +8,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "change-me-in-production")
 
-DEBUG = os.getenv("DJANGO_DEBUG", "True") == "True"
+#DEBUG = os.getenv("DJA
+# NGO_DEBUG", "True") == "True"
+DEBUG = 'FALSE'
 
-ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "*").split(",")
-ALLOWED_HOSTS += ["8ce09dd10faf.ngrok-free.app"]
+ALLOWED_HOSTS = ["*"]
 
 # CSRF trusted origins: supply a comma-separated list of origins (including scheme)
 # e.g. DJANGO_CSRF_TRUSTED_ORIGINS=https://abcd1234.ngrok.io,https://example.com
@@ -48,6 +49,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware"
 ]
 
 ROOT_URLCONF = "rides_project.urls"
@@ -83,10 +85,22 @@ WSGI_APPLICATION = "rides_project.wsgi.application"
     }
 } """
 
-DATABASES = {
+if DEBUG:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
+else:
+    DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.environ.get('DB_NAME'),
+        'USER': os.environ.get('DB_USER'),
+        'PASSWORD': os.environ.get('DB_PASSWORD'),
+        'HOST': os.environ.get('DB_HOST'),
+        'PORT': '5432',
     }
 }
 
@@ -112,6 +126,7 @@ USE_TZ = True
 
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+
 
 # Email
 # In development prefer the console backend to avoid real SMTP/TLS issues.
