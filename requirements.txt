@@ -2,8 +2,10 @@ asgiref==3.11.0
 certifi==2025.11.12
 charset-normalizer==3.4.4
 colorama==0.4.6
+dj-database-url==3.1.0
 Django==6.0
 djangorestframework==3.16.1
+gunicorn==23.0.0
 idna==3.11
 iniconfig==2.3.0
 mysqlclient==2.2.7
@@ -20,6 +22,4 @@ six==1.17.0
 sqlparse==0.5.4
 tzdata==2025.3
 urllib3==2.6.2
-dj-database-url
-gunicorn
-whitenoise
+whitenoise==6.11.0
