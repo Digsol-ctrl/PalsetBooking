@@ -1,8 +1,14 @@
 <!DOCTYPE html>
 <html>
-<head><meta charset="utf-8"><title>Error</title></head>
+<head>
+  <meta charset="utf-8">
+  <title>Error</title>
+  {% load static %}
+  <link rel="stylesheet" href="{% static 'css/payments.css' %}">
+</head>
 <body>
-  <h1>Error</h1>
-  <p>{{ message }}</p>
-</body>
+  <div class="container">
+    <h1>Error</h1>
+    <p>{{ message }}</p>
+  </div>
 </html>
