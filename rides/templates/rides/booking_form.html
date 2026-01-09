@@ -3,11 +3,9 @@
 <head>
     <meta charset="utf-8">
     <title>Book a Ride</title>
-    <script src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_MAPS_API_KEY }}&libraries=places"></script>
-    <style>
-        body { font-family: Arial, sans-serif; padding: 20px; }
-        .form-row { margin-bottom: 10px; }
-    </style>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/payments.css' %}">
+    <script async defer src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_MAPS_API_KEY }}&libraries=places&callback=initPlaceAutocomplete"></script>
 </head>
 <body>
 <h1>Book a Ride</h1>
@@ -59,12 +57,12 @@
         <input name="email" type="email" required>
     </div>
 
-    <div class="form-row">
+    <div class="form-row payment-row">
         <label>Payment</label>
-        <select name="payment_option">
-            <option value="POA">Pay on Arrival</option>
-            <option value="PAYNOW">Pay Online (Paynow)</option>
-        </select>
+        <div class="payment-options" role="radiogroup" aria-label="Payment method">
+            <label class="radio"><input type="radio" name="payment_option" value="POA" checked> Pay on Arrival</label>
+            <label class="radio"><input type="radio" name="payment_option" value="PAYNOW"> Pay Online (Paynow)</label>
+        </div>
     </div>
 
     <button type="submit">Book</button>

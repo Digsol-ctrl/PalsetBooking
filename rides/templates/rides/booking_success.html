@@ -3,15 +3,18 @@
 <head>
   <meta charset="utf-8">
   <title>Booking Confirmed</title>
+  {% load static %}
+  <link rel="stylesheet" href="{% static 'css/payments.css' %}">
 </head>
 <body>
-  <h1>Booking Confirmed</h1>
-  <p>Booking ID: {{ booking.id }}</p>
-  <p>Pickup: {{ booking.pickup_address }}</p>
-  <p>Dropoff: {{ booking.dropoff_address }}</p>
-  <p>Distance: {{ booking.distance_km }} km</p>
-  <p>Total: ${{ booking.total_amount }}</p>
+  <div class="container">
+    <h1>Booking Confirmed</h1>
+    <p>Booking ID: {{ booking.id }}</p>
+    <p>Pickup: {{ booking.pickup_address }}</p>
+    <p>Dropoff: {{ booking.dropoff_address }}</p>
+    <p>Distance: {{ booking.distance_km }} km</p>
+    <p>Total: ${{ booking.total_amount }}</p>
 
-  <p><strong>To call the driver:</strong> <a href="tel:{{ TAXI_OWNER_PHONE }}">Call driver</a></p>
-</body>
+    <p><strong>To call the driver:</strong> <a href="tel:{{ TAXI_OWNER_PHONE }}">Call driver</a></p>
+  </div>
 </html>
