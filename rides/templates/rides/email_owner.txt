@@ -10,4 +10,4 @@ Email: {{ booking.email }}
 
 Payment status: {{ payment_status }}
 
-Call the driver/owner at {{ taxi_owner_phone }} to confirm.
+Please call the driver/owner at {{ taxi_owner_phone }} to confirm the booking.

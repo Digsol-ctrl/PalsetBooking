@@ -1,0 +1,12 @@
+{% extends "admin/base_site.html" %}
+
+{% block title %}Palset Admin — {{ block.super }}{% endblock %}
+
+{% block site_title %}Palset Admin{% endblock %}
+{% block site_header %}<h1 id="site-name">Palset Admin</h1>{% endblock %}
+
+{% block extrahead %}
+  {{ block.super }}
+  {# Include a small admin override for improved mobile spacing and readability #}
+  <link rel="stylesheet" href="{% static 'admin/css/custom_admin.css' %}">
+{% endblock %}

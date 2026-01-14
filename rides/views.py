@@ -23,7 +23,8 @@ class BookingFormView(FormView):
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        ctx['GOOGLE_MAPS_API_KEY'] = settings.GOOGLE_MAPS_API_KEY
+        # Provide the client-side Maps key to the template
+        ctx['GOOGLE_MAPS_CLIENT_KEY'] = settings.GOOGLE_MAPS_CLIENT_KEY
         ctx['TAXI_OWNER_PHONE'] = settings.TAXI_OWNER_PHONE
         return ctx
 
@@ -550,20 +551,15 @@ class PaynowPollView(APIView):
         # Use PaynowService.verify_payment (SDK) if available, otherwise fall back to a simple HTTP probe
         try:
             status_obj = paynow.verify_payment(poll_url)
-        except NotImplementedError:
-            try:
-                resp = _requests.get(poll_url, timeout=10, verify=getattr(settings, 'PAYNOW_VERIFY_SSL', True))
-                text = (resp.text or '').lower()
-                if 'paid' in text or 'success' in text or 'payment received' in text:
-                    status_obj = {'paid': True, 'status': 'Paid (scraped)'}
-                else:
-                    status_obj = {'paid': False, 'status': 'Pending (scraped)'}
-            except Exception as e:
-                logger.exception('HTTP poll fallback failed: %s', e)
-                return Response({'error': 'poll_failed', 'message': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         except Exception as e:
             logger.exception('Error checking Paynow status: %s', e)
             return Response({'error': 'verify_failed', 'message': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # Log poll result for diagnostics (include first chunk of any scraped response when present)
+        try:
+            logger.debug('Paynow poll result for %s: %s', poll_url, status_obj)
+        except Exception:
+            pass
 
         if status_obj.get('paid'):
             from django.db import transaction

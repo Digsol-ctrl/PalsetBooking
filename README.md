@@ -22,7 +22,7 @@ Deployment notes for cPanel:
 - Configure environment variables in the cPanel app settings or via a `.env` file (ensure it's outside the webroot).
 - Set `ALLOWED_HOSTS` to your subdomain or proxy domain.
 - Configure SMTP settings (EMAIL_HOST, EMAIL_HOST_USER, EMAIL_HOST_PASSWORD) for transactional emails.
-- Ensure `GOOGLE_MAPS_API_KEY` and `PAYNOW_*` settings are set.
+- Ensure `GOOGLE_MAPS_CLIENT_KEY` (browser key for Maps JS + Places) and `GOOGLE_MAPS_SERVER_KEY` (server key for Distance Matrix) and `PAYNOW_*` settings are set. You can also set `GOOGLE_MAPS_API_KEY` (backwards-compatible) if you prefer a single key for both client and server.
 
 Branding colors (from user): **()** — add CSS replacements where necessary in templates.
 
@@ -32,7 +32,7 @@ Contact details (reference):
 - Email: enquiries@easytransit.co.zw
 
 Notes:
-- The `DistanceService` is a placeholder and must be implemented using the Google Distance Matrix API in production.
+- The `DistanceService` calls the Google Distance Matrix API (server-side) and caches results to reduce API usage and cost.
 - The `PaynowService` is a skeleton — verify fields and signature requirements against Paynow documentation.
 - Pricing rules and kid fee calculations are implemented as documented; adjust with business as needed.
 
@@ -45,13 +45,12 @@ The booking form uses the Google Maps JavaScript API and the Places (New) Autoco
 - Enable the **Maps JavaScript API** and **Places API (New)** in the Google Cloud Console (APIs & Services → Library).
 - If you perform server-side distance calculations, enable the **Distance Matrix API** or the **Routes API** depending on which service you use.
 - Ensure **Billing is enabled** for the project — Maps APIs require billing to be active even for small usage tiers.
-- For development, add HTTP referrer restrictions for `http://localhost:8000/*` and `http://127.0.0.1:8000/*` to your API key; for production, restrict to your production domain(s).
-- Store your actual API key in a local `.env` (not `.env.example`) or as an environment variable named `GOOGLE_MAPS_API_KEY` and do not commit it to source control.
-
-Example (local `.env`):
+- For development, add HTTP referrer restrictions for `http://localhost:8000/*` and `http://127.0.0.1:8000/*` to your browser API key; for production, restrict to your production domain(s).
+- Store your actual API keys in a local `.env` (not `.env.example`) and do not commit them to source control. Example keys:
 
 ```
-GOOGLE_MAPS_API_KEY=your_real_key_here
+GOOGLE_MAPS_CLIENT_KEY=your_browser_key_here
+GOOGLE_MAPS_SERVER_KEY=your_server_key_here
 ```
 
 If you see console warnings about legacy APIs or `ApiNotActivatedMapError`, confirm you have enabled the correct (new) Places API and that the key's project has billing enabled. The template uses `PlaceAutocompleteElement` and will display a friendly message if the key does not have access to the new Places API.

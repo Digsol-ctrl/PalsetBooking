@@ -1,10 +1,10 @@
-Thanks for your booking {{ booking.id }}
+Thanks for your booking ({{ booking.id }})
 
 Pickup: {{ booking.pickup_address }}
 Dropoff: {{ booking.dropoff_address }}
 Distance: {{ booking.distance_km }} km
-Total: {{ booking.total_amount }}
+Total: ${{ booking.total_amount }}
 
 Payment status: {{ payment_status }}
 
-We will contact you at {{ booking.phone }} if needed.
+We may contact you at {{ booking.phone }} if needed. Thank you for choosing us.

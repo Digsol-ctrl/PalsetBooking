@@ -1,51 +1,62 @@
+{% load static %}
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Redirecting to Paynow</title>
-  {% load static %}
   <link rel="stylesheet" href="{% static 'css/payments.css' %}">
 </head>
 <body>
-  <h1>Redirecting to payment</h1>
-  {% if redirect_url and redirect_is_valid %}
-    <p>If you are not redirected automatically <a id="link" class="btn" href="{{ redirect_url }}" target="_blank">click here to pay</a></p>
-    <script>window.location.href = "{{ redirect_url }}";</script>
-  {% elif redirect_url %}
-    <p>Paynow returned an invalid redirect URL: <code>{{ redirect_url|escape }}</code></p>
-    <p>{{ message }}</p>
-  {% else %}
-    <p>{{ message }}</p>
-  {% endif %}
+  <main class="container">
+    <header class="page-header">
+      <h1 class="page-title">Redirecting to payment</h1>
+      <p class="lead">You'll be taken to Paynow to complete your payment. If nothing happens, use the button below.</p>
+    </header>
 
-  {% if payment_id and booking_id %}
-    <hr />
-    <p>You can check your payment status here — this page will update automatically:</p>
-    <div id="status-text" style="color:#666">Checking…</div>
-    <button id="check-now" class="btn">Check now</button>
-    <script>
-      (function(){
-        const paymentId = "{{ payment_id }}";
-        const bookingId = "{{ booking_id }}";
-        const statusEl = document.getElementById('status-text');
-        const checkUrl = `/rides/paynow/poll/${paymentId}/`;
+    {% if redirect_url and redirect_is_valid %}
+      <p><a id="open-paynow" class="btn primary" href="{{ redirect_url }}" target="_blank" rel="noopener">Open Paynow to pay</a></p>
+      <p class="small u-muted">If your browser blocks the redirect, tap the button above.</p>
+      <script>
+        (function(){
+          try{ window.location.href = "{{ redirect_url }}"; }catch(e){ /* ignore */ }
+        })();
+      </script>
+    {% elif redirect_url %}
+      <div class="success-card">
+        <p class="error"><strong>Invalid redirect URL:</strong> <code>{{ redirect_url|escape }}</code></p>
+        <p>{{ message }}</p>
+      </div>
+    {% else %}
+      <div class="success-card"><p>{{ message }}</p></div>
+    {% endif %}
 
-        async function checkStatus(){
-          try{
-            const res = await fetch(checkUrl, {cache:'no-cache'});
-            if(!res.ok){ statusEl.textContent = 'Check failed: ' + res.status; return; }
-            const json = await res.json();
-            if(json.paid){ statusEl.textContent = 'Payment confirmed — redirecting...'; window.location.href = `/rides/bookings/success/${bookingId}/`; }
-            else{ statusEl.textContent = 'Pending: ' + (json.status || 'pending'); }
-          }catch(e){ statusEl.textContent = 'Error checking status: ' + e.message; }
-        }
+    {% if payment_id and booking_id %}
+      <hr />
+      <p>You can check your payment status here:</p>
+      <div id="status-text" class="u-muted">Checking…</div>
+      <div style="margin-top:12px"><button id="check-now" class="btn">Check now</button></div>
+      <script>
+        (function(){
+          const statusEl = document.getElementById('status-text');
+          const checkUrl = `/rides/paynow/poll/{{ payment_id }}/`;
 
-        document.getElementById('check-now').addEventListener('click', checkStatus);
-        // start background polling
-        const t = setInterval(checkStatus, 5000);
-        checkStatus();
-      })();
-    </script>
-  {% endif %}
+          async function checkStatus(){
+            try{
+              const res = await fetch(checkUrl, {cache:'no-cache'});
+              if(!res.ok){ statusEl.textContent = 'Check failed: ' + res.status; return; }
+              const json = await res.json();
+              if(json.paid){ statusEl.textContent = 'Payment confirmed — redirecting...'; window.location.href = `/rides/bookings/success/{{ booking_id }}/`; }
+              else{ statusEl.textContent = 'Pending: ' + (json.status || 'pending'); }
+            }catch(e){ statusEl.textContent = 'Error checking status'; }
+          }
+
+          document.getElementById('check-now').addEventListener('click', checkStatus);
+          const t = setInterval(checkStatus, 5000);
+          checkStatus();
+        })();
+      </script>
+    {% endif %}
+  </main>
 </body>
 </html>

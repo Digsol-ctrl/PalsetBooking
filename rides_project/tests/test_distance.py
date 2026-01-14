@@ -19,7 +19,7 @@ class FakeResponse:
 
 def test_distance_parsing(monkeypatch):
     cache.clear()
-    monkeypatch.setattr(settings, 'GOOGLE_MAPS_API_KEY', 'fake-key')
+    monkeypatch.setattr(settings, 'GOOGLE_MAPS_SERVER_KEY', 'fake-key')
 
     data = {
         "destination_addresses": ["Dest"],
@@ -41,7 +41,7 @@ def test_distance_parsing(monkeypatch):
 
 def test_distance_caching(monkeypatch):
     cache.clear()
-    monkeypatch.setattr(settings, 'GOOGLE_MAPS_API_KEY', 'fake-key')
+    monkeypatch.setattr(settings, 'GOOGLE_MAPS_SERVER_KEY', 'fake-key')
 
     call_count = {'n': 0}
 
@@ -69,3 +69,26 @@ def test_distance_caching(monkeypatch):
     assert call_count['n'] == 1
     assert abs(d1 - 5.0) < 0.0001
     assert abs(d2 - 5.0) < 0.0001
+
+
+def test_distance_uses_server_key(monkeypatch):
+    cache.clear()
+    monkeypatch.setattr(settings, 'GOOGLE_MAPS_SERVER_KEY', 'server-key')
+    called = {}
+
+    def fake_get(url, params=None, timeout=None):
+        called['params'] = params
+        data = {
+            "destination_addresses": ["Dest"],
+            "origin_addresses": ["Orig"],
+            "rows": [
+                {"elements": [{"status": "OK", "distance": {"text": "1.000 km", "value": 1000}, "duration": {"text": "1 mins", "value": 60}}]}
+            ],
+            "status": "OK",
+        }
+        return FakeResponse(data)
+
+    monkeypatch.setattr(requests, 'get', fake_get)
+
+    DistanceService.get_distance_km((-17.8, 31.0), (-17.9, 31.1))
+    assert called['params']['key'] == 'server-key'

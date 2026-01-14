@@ -1,87 +1,83 @@
+{% load static %}
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Payment Result</title>
-  {% load static %}
   <link rel="stylesheet" href="{% static 'css/payments.css' %}">
 </head>
 <body>
-  <h1>Payment Status</h1>
+  <main class="container">
+    <header class="page-header">
+      <h1 class="page-title">Payment Status</h1>
+      <p class="lead">We will update this page once the payment completes.</p>
+    </header>
 
-  {% if payment and booking %}
-    <h2>Booking Summary</h2>
-    <p><strong>Booking ID:</strong> {{ booking.id }}</p>
-    <p><strong>Pickup:</strong> {{ booking.pickup_address }}</p>
-    <p><strong>Dropoff:</strong> {{ booking.dropoff_address }}</p>
-    <p><strong>Distance:</strong> {{ booking.distance_km }} km</p>
-    <p><strong>Total:</strong> ${{ booking.total_amount }}</p>
+    {% if payment and booking %}
+      <section class="success-card" aria-labelledby="booking-summary">
+        <h2 id="booking-summary" class="sr-only">Booking summary</h2>
+        <dl>
+          <div><dt>Booking ID</dt><dd>{{ booking.id }}</dd></div>
+          <div><dt>Pickup</dt><dd>{{ booking.pickup_address }}</dd></div>
+          <div><dt>Dropoff</dt><dd>{{ booking.dropoff_address }}</dd></div>
+          <div><dt>Distance</dt><dd>{{ booking.distance_km }} km</dd></div>
+          <div><dt>Total</dt><dd>$ {{ booking.total_amount }}</dd></div>
+          {% if eta_minutes %}<div><dt>ETA</dt><dd>{{ eta_minutes }} minutes</dd></div>{% endif %}
+        </dl>
 
-    {% if eta_minutes %}
-      <p><strong>Estimated travel time:</strong> {{ eta_minutes }} minutes</p>
-    {% endif %}
+        {% if maps_url %}<p><a href="{{ maps_url }}" target="_blank" rel="noopener">Open directions in Google Maps</a></p>{% endif %}
+        <p><strong>To call the driver:</strong> <a href="tel:{{ TAXI_OWNER_PHONE }}">{{ TAXI_OWNER_PHONE }}</a></p>
 
-    {% if maps_url %}
-      <p><a href="{{ maps_url }}" target="_blank" rel="noopener">Open directions in Google Maps</a></p>
-    {% endif %}
+        <div id="payment-status">
+          {% if payment.status == payment.STATUS_PAID %}
+            <p class="success"><strong>Payment confirmed.</strong> Thank you. Your booking is confirmed.</p>
+            <p>View booking details <a href="{% url 'rides:booking_success' pk=booking.id %}">here</a>.</p>
+          {% elif payment.status == payment.STATUS_FAILED %}
+            <p class="error"><strong>Payment failed.</strong> Please contact support or try again.</p>
+          {% else %}
+            <p><strong>Payment is pending.</strong> We'll confirm it as soon as we receive server notification.</p>
+            <p>If you completed payment, this page will update automatically; otherwise you can <a href="{% url 'rides:booking_success' pk=booking.id %}">view booking</a> or contact support at <a href="tel:{{ TAXI_OWNER_PHONE }}">{{ TAXI_OWNER_PHONE }}</a>.</p>
+            <p id="poll-message">Checking payment status...</p>
+          {% endif %}
+        </div>
 
-    <p><strong>To call the driver:</strong> <a href="tel:{{ TAXI_OWNER_PHONE }}">{{ TAXI_OWNER_PHONE }}</a></p>
+      </section>
 
-    <div id="payment-status">
-      {% if payment.status == payment.STATUS_PAID %}
-        <p class="success"><strong>Payment confirmed.</strong> Thank you. Your booking is confirmed.</p>
-        <p>View booking details <a href="{% url 'rides:booking_success' pk=booking.id %}">here</a>.</p>
-      {% elif payment.status == payment.STATUS_FAILED %}
-        <p class="error"><strong>Payment failed.</strong> Please contact support or try again.</p>
-      {% else %}
-        <p><strong>Payment is pending.</strong> We'll confirm it as soon as we receive server notification.</p>
-        <p>If you completed payment, this page will update automatically; otherwise you can <a href="{% url 'rides:booking_success' pk=booking.id %}">view booking</a> or contact support at <a href="tel:{{ TAXI_OWNER_PHONE }}">{{ TAXI_OWNER_PHONE }}</a>.</p>
-        <p id="poll-message">Checking payment status...</p>
-      {% endif %}
-    </div>
-
-    {% if payment.status != payment.STATUS_PAID %}
-    <script>
-      (function(){
-        var pollUrl = "{{ poll_url }}";
-        var paymentId = "{{ payment.id }}";
-        var tries = 0, maxTries = 40; // stop after ~200s
-        function check() {
-          fetch(pollUrl, { credentials: 'same-origin' }).then(function(r){ return r.json()}).then(function(j){
-            if (j.paid) {
-              document.getElementById('payment-status').innerHTML = '<p class="success"><strong>Payment confirmed.</strong> Redirecting to booking page...</p>';
-              setTimeout(function(){ window.location = "{% url 'rides:booking_success' pk=booking.id %}"; }, 1500);
-            } else {
-              document.getElementById('poll-message').textContent = 'Current status: ' + (j.status || 'pending');
-              tries += 1;
-              if (tries < maxTries) {
-                setTimeout(check, 5000);
+      {% if payment.status != payment.STATUS_PAID %}
+      <script>
+        (function(){
+          var pollUrl = "{{ poll_url }}";
+          var tries = 0, maxTries = 40; // stop after ~200s
+          function check() {
+            fetch(pollUrl, { credentials: 'same-origin' }).then(function(r){ return r.json()}).then(function(j){
+              if (j.paid) {
+                document.getElementById('payment-status').innerHTML = '<p class="success"><strong>Payment confirmed.</strong> Redirecting to booking page...</p>';
+                setTimeout(function(){ window.location = "{% url 'rides:booking_success' pk=booking.id %}"; }, 1500);
               } else {
-                document.getElementById('poll-message').textContent = 'Still pending — we will email you once payment is confirmed.';
+                var el = document.getElementById('poll-message'); if(el) el.textContent = 'Current status: ' + (j.status || 'pending');
+                tries += 1;
+                if (tries < maxTries) { setTimeout(check, 5000); } else { if(el) el.textContent = 'Still pending — we will email you once payment is confirmed.'; }
               }
-            }
-          }).catch(function(e){
-            console.warn('Poll failed', e);
-            tries += 1;
-            if (tries < maxTries) setTimeout(check, 5000);
-          });
-        }
-        // Start polling shortly to allow Paynow to finish redirect
-        setTimeout(check, 1500);
-      }());
-    </script>
+            }).catch(function(e){ console.warn('Poll failed', e); tries += 1; if (tries < maxTries) setTimeout(check, 5000); });
+          }
+          setTimeout(check, 1500);
+        }());
+      </script>
+      {% endif %}
+
+    {% else %}
+      <div class="success-card">
+        <p>{{ message }}</p>
+        <form method="get" action="{% url 'rides:paynow_return' %}">
+          <label for="reference">Enter Booking ID, Payment ID or Paynow reference</label>
+          <input id="reference" name="reference" placeholder="e.g. 2f3c... or PAYREF123" aria-label="reference" class="input" />
+          <div style="margin-top:12px"><button type="submit" class="btn">Check</button></div>
+        </form>
+        <p class="u-muted">If you need help, contact support: <a href="tel:{{ TAXI_OWNER_PHONE }}">{{ TAXI_OWNER_PHONE }}</a>.</p>
+      </div>
     {% endif %}
-  {% else %}
-    <p>{{ message }}</p>
 
-    <form method="get" action="{% url 'rides:paynow_return' %}">
-      <label for="reference">Enter Booking ID, Payment ID or Paynow reference</label>
-      <input id="reference" name="reference" placeholder="e.g. 2f3c... or PAYREF123" aria-label="reference" />
-      <button type="submit">Check</button>
-    </form>
-
-    <p class="muted">If you need help, contact support: <a href="tel:{{ TAXI_OWNER_PHONE }}">{{ TAXI_OWNER_PHONE }}</a>.</p>
-  {% endif %}
-
+  </main>
 </body>
 </html>

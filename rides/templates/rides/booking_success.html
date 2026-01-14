@@ -1,20 +1,49 @@
+{% load static %}
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Booking Confirmed</title>
-  {% load static %}
   <link rel="stylesheet" href="{% static 'css/payments.css' %}">
 </head>
 <body>
-  <div class="container">
-    <h1>Booking Confirmed</h1>
-    <p>Booking ID: {{ booking.id }}</p>
-    <p>Pickup: {{ booking.pickup_address }}</p>
-    <p>Dropoff: {{ booking.dropoff_address }}</p>
-    <p>Distance: {{ booking.distance_km }} km</p>
-    <p>Total: ${{ booking.total_amount }}</p>
+  <main class="container">
+    <header class="page-header">
+      <h1 class="page-title">Booking Confirmed</h1>
+      <p class="lead">Your request has been received — details below.</p>
+    </header>
 
-    <p><strong>To call the driver:</strong> <a href="tel:{{ TAXI_OWNER_PHONE }}">Call driver</a></p>
-  </div>
+    <section class="success-card" aria-labelledby="booking-heading">
+      <h2 id="booking-heading" class="sr-only">Booking details</h2>
+      <dl>
+        <div>
+          <dt>Booking ID</dt>
+          <dd>{{ booking.id }}</dd>
+        </div>
+        <div>
+          <dt>Pickup</dt>
+          <dd>{{ booking.pickup_address }}</dd>
+        </div>
+        <div>
+          <dt>Dropoff</dt>
+          <dd>{{ booking.dropoff_address }}</dd>
+        </div>
+        <div>
+          <dt>Distance</dt>
+          <dd>{{ booking.distance_km }} km</dd>
+        </div>
+        <div>
+          <dt>Total</dt>
+          <dd>$ {{ booking.total_amount }}</dd>
+        </div>
+      </dl>
+
+      <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap">
+        <a class="btn secondary" href="tel:{{ TAXI_OWNER_PHONE }}">Call driver</a>
+        <a class="btn" href="/rides">Back to home.</a>
+      </div>
+    </section>
+  </main>
+</body>
 </html>

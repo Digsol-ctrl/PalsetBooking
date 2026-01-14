@@ -386,5 +386,59 @@ class PaynowService:
             status = paynow.check_transaction_status(poll_url)
             return {'paid': getattr(status, 'paid', False), 'status': getattr(status, 'status', None)}
         except Exception:
-            # Not implemented for HTTP fallback
-            raise NotImplementedError("verify_payment requires the paynow SDK or custom implementation")
+            # Fallback to an HTTP probe that attempts to handle common Paynow responses.
+            # This is more tolerant for environments without the Paynow SDK.
+            try:
+                verify_ssl = getattr(settings, 'PAYNOW_VERIFY_SSL', True)
+                resp = requests.get(poll_url, timeout=10, verify=verify_ssl, allow_redirects=True)
+            except Exception as e:
+                logger.exception('HTTP poll to Paynow failed: %s', e)
+                # Give up gracefully: return pending with error status
+                return {'paid': False, 'status': f'poll_error: {e}'}
+
+            text = (resp.text or '')
+            # Try parse JSON first
+            try:
+                data = resp.json()
+            except Exception:
+                data = None
+
+            # Inspect JSON response for common fields
+            if isinstance(data, dict):
+                # Known keys that may indicate payment
+                paid = False
+                status_val = None
+                # boolean 'paid'
+                if 'paid' in data and isinstance(data.get('paid'), bool):
+                    paid = data.get('paid')
+                    status_val = str(data.get('status') or data.get('message') or data.get('result') or status_val)
+                    return {'paid': bool(paid), 'status': status_val or 'paid' if paid else 'pending'}
+
+                # textual status fields
+                for k in ('status', 'payment_status', 'result', 'message'):
+                    if k in data and data[k] is not None:
+                        try:
+                            s = str(data[k])
+                        except Exception:
+                            s = None
+                        if s:
+                            low = s.lower()
+                            if any(x in low for x in ('paid', 'success', 'completed')):
+                                return {'paid': True, 'status': s}
+                            if any(x in low for x in ('pending', 'awaiting', 'awaiting delivery', 'awaiting payment')):
+                                return {'paid': False, 'status': s}
+                            status_val = s
+                # Fallback: return unknown textual status
+                return {'paid': False, 'status': status_val or 'unknown'}
+
+            # No JSON — inspect HTML/text for keywords
+            low = text.lower()
+            if any(k in low for k in ('paid', 'payment received', 'payment successful', 'success')):
+                return {'paid': True, 'status': 'Paid (scraped)'}
+            if any(k in low for k in ('awaiting delivery', 'awaiting payment', 'pending', 'not paid')):
+                return {'paid': False, 'status': 'Pending (scraped)'}
+
+            # If nothing matched, return pending with a snippet for diagnostics
+            snippet = (text or '')[:1000]
+            logger.debug('Paynow poll HTTP response snippet: %s', snippet[:800])
+            return {'paid': False, 'status': 'Unknown (scraped)'}

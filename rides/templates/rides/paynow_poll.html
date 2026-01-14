@@ -1,68 +1,52 @@
+{% load static %}
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Payment initiated — Paynow</title>
-  {% load static %}
   <link rel="stylesheet" href="{% static 'css/payments.css' %}">
 </head>
 <body>
-  <h1>Payment initiated</h1>
-  <p>{{ message }}</p>
+  <main class="container">
+    <header class="page-header">
+      <h1 class="page-title">Payment initiated</h1>
+      <p class="lead">Complete your payment on Paynow to confirm the booking.</p>
+    </header>
 
-  {% if redirect_url and redirect_is_valid %}
-    <p><a id="open-paynow" class="btn" href="{{ redirect_url }}" target="_blank">Open Paynow to complete payment</a></p>
-  {% elif poll_url %}
-    <p><button id="open-paynow" class="btn" onclick="window.open('{{ poll_url }}','_blank')">Open Paynow</button></p>
-  {% else %}
-    <p class="muted">This payment needs to be completed via Paynow. If you need help, contact support.</p>
-  {% endif %}
+    <div class="success-card">
+      <p>{{ message }}</p>
+      {% if redirect_url and redirect_is_valid %}
+        <p><a id="open-paynow" class="btn primary" href="{{ redirect_url }}" target="_blank" rel="noopener">Open Paynow to complete payment</a></p>
+      {% elif poll_url %}
+        <p><a id="open-paynow" class="btn primary" href="{{ poll_url }}" target="_blank" rel="noopener">Open Paynow</a></p>
+      {% else %}
+        <p class="u-muted">This payment needs to be completed via Paynow. If you need help, contact support.</p>
+      {% endif %}
 
-  <p><button id="check-now" class="btn">I've paid — Check now</button></p>
+      <div style="margin-top:12px">
+        <button id="check-now" class="btn">I've paid — Check now</button>
+      </div>
+      <p id="status-text" class="u-muted" style="margin-top:12px">Waiting for confirmation…</p>
+    </div>
 
-  <p id="status-text" class="muted">Waiting for confirmation…</p>
+    <script>
+      (function(){
+        const statusEl = document.getElementById('status-text');
+        const checkUrl = `/rides/paynow/poll/{{ payment_id }}/`;
+        let attempts = 0, timer = null, maxAttempts = 20;
 
-  <script>
-    (function(){
-      const paymentId = "{{ payment_id }}";
-      const bookingId = "{{ booking_id }}";
-      const statusEl = document.getElementById('status-text');
-      const checkUrl = `/rides/paynow/poll/${paymentId}/`;
-      let attempts = 0;
-      const maxAttempts = 20;
-      let timer = null;
+        function setStatus(t){ if(statusEl) statusEl.textContent = t; }
+        function handleResult(json){ if(!json) return; if(json.error){ setStatus('Error: ' + (json.message||json.error)); return; } if(json.paid){ setStatus('Payment received — redirecting to confirmation...'); window.location.href = `/rides/bookings/success/{{ booking_id }}/`; } else { setStatus('Payment still pending (' + (json.status || 'pending') + '). Checking again...'); } }
 
-      function setStatus(t){ statusEl.textContent = t; }
+        async function checkStatus(){ attempts++; try{ const res = await fetch(checkUrl, {cache:'no-cache'}); if(!res.ok){ const text = await res.text(); setStatus('Check failed: ' + res.status + ' ' + text); if(attempts>=maxAttempts) clearInterval(timer); return; } const json = await res.json(); handleResult(json); if(json.paid && timer) clearInterval(timer); if(!json.paid && attempts>=maxAttempts){ clearInterval(timer); setStatus('Payment still pending — please check Paynow or contact support.'); } }catch(e){ setStatus('Error checking status: ' + e.message); clearInterval(timer); } }
 
-      function handleResult(json){
-        if(json.error){ setStatus('Error: ' + (json.message||json.error)); return; }
-        if(json.paid){
-          setStatus('Payment received — redirecting to confirmation...');
-          window.location.href = `/rides/bookings/success/${bookingId}/`;
-        } else {
-          setStatus('Payment still pending (' + (json.status || 'pending') + '). Checking again...');
-        }
-      }
+        document.getElementById('check-now').addEventListener('click', function(){ attempts=0; checkStatus(); });
+        timer = setInterval(checkStatus, 5000);
+        checkStatus();
+      })();
+    </script>
 
-      async function checkStatus(){
-        attempts++;
-        try{
-          const res = await fetch(checkUrl, {cache:'no-cache'});
-          if(!res.ok){ const text = await res.text(); setStatus('Check failed: ' + res.status + ' ' + text); if(attempts>=maxAttempts) clearInterval(timer); return; }
-          const json = await res.json();
-          handleResult(json);
-          if(json.paid && timer) clearInterval(timer);
-          if(!json.paid && attempts>=maxAttempts){ clearInterval(timer); setStatus('Payment still pending — please check Paynow or contact support.'); }
-        }catch(e){ setStatus('Error checking status: ' + e.message); clearInterval(timer); }
-      }
-
-      document.getElementById('check-now').addEventListener('click', function(){ attempts=0; checkStatus(); });
-
-      // Start polling every 5s
-      timer = setInterval(checkStatus, 5000);
-      // Immediate check
-      checkStatus();
-    })();
-  </script>
+  </main>
 </body>
 </html>

@@ -1,18 +1,26 @@
+{% load static %}
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Redirecting to Paynow</title>
-  {% load static %}
   <link rel="stylesheet" href="{% static 'css/payments.css' %}">
 </head>
 <body>
-  <h1>Redirecting to payment</h1>
-  {% if redirect_url %}
-    <p>If you are not redirected automatically <a id="link" href="{{ redirect_url }}">click here to pay</a></p>
-    <script>window.location.href = "{{ redirect_url }}";</script>
-  {% else %}
-    <p>{{ message }}</p>
-  {% endif %}
+  <main class="container">
+    <header class="page-header">
+      <h1 class="page-title">Redirecting to payment</h1>
+      <p class="lead">You will be redirected to Paynow shortly. If the redirect does not occur, use the button below.</p>
+    </header>
+
+    {% if redirect_url %}
+      <p><a id="open-paynow" class="btn primary" href="{{ redirect_url }}" target="_blank" rel="noopener">Open Paynow to pay</a></p>
+      <script>try{window.location.href = "{{ redirect_url }}";}catch(e){}
+      </script>
+    {% else %}
+      <div class="success-card"><p>{{ message }}</p></div>
+    {% endif %}
+  </main>
 </body>
 </html>

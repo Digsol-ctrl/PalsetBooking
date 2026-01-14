@@ -27,8 +27,10 @@ class DistanceService:
         if not origin or not destination or len(origin) != 2 or len(destination) != 2:
             raise ValueError("origin and destination must be (lat, lng) tuples")
 
-        if not settings.GOOGLE_MAPS_API_KEY:
-            raise RuntimeError("GOOGLE_MAPS_API_KEY is not configured in settings")
+        # Prefer a server-specific key; fall back to the legacy single key if not provided
+        api_key = getattr(settings, "GOOGLE_MAPS_SERVER_KEY", None) or getattr(settings, "GOOGLE_MAPS_API_KEY", None)
+        if not api_key:
+            raise RuntimeError("GOOGLE_MAPS_SERVER_KEY or GOOGLE_MAPS_API_KEY is not configured in settings")
 
         lat1, lng1 = float(origin[0]), float(origin[1])
         lat2, lng2 = float(destination[0]), float(destination[1])
@@ -45,7 +47,7 @@ class DistanceService:
             "units": "metric",
             "origins": f"{lat1},{lng1}",
             "destinations": f"{lat2},{lng2}",
-            "key": settings.GOOGLE_MAPS_API_KEY,
+            "key": api_key,
         }
 
         try:

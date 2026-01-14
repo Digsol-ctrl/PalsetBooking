@@ -1,14 +1,24 @@
-<html>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>New booking</title>
+    <style>body{font-family:system-ui, -apple-system, Roboto, Arial;color:#082033;line-height:1.4}.card{background:#fff;padding:16px;border-radius:8px}dt{font-weight:700}dd{margin:0 0 12px 0}</style>
+  </head>
   <body>
-    <h2>New ride booking: {{ booking.id }}</h2>
-    <p><strong>Pickup:</strong> {{ booking.pickup_address }}<br>
-    <strong>Dropoff:</strong> {{ booking.dropoff_address }}</p>
-    <p><strong>Distance:</strong> {{ booking.distance_km }} km</p>
-    <p><strong>Passengers:</strong> {{ booking.num_adults }} adults, {{ booking.num_kids_seated }} kids seated, {{ booking.num_kids_carried }} kids carried</p>
-    <p><strong>Luggage:</strong> {{ booking.luggage_count }}</p>
-    <p><strong>Phone:</strong> {{ booking.phone }}<br>
-    <strong>Email:</strong> {{ booking.email }}</p>
-    <p><strong>Payment status:</strong> {{ payment_status }}</p>
-    <p>Call the driver/owner at {{ taxi_owner_phone }} to confirm.</p>
+    <div class="card">
+      <h2>New ride booking: {{ booking.id }}</h2>
+      <dl>
+        <div><dt>Pickup</dt><dd>{{ booking.pickup_address }}</dd></div>
+        <div><dt>Dropoff</dt><dd>{{ booking.dropoff_address }}</dd></div>
+        <div><dt>Distance</dt><dd>{{ booking.distance_km }} km</dd></div>
+        <div><dt>Passengers</dt><dd>{{ booking.num_adults }} adults, {{ booking.num_kids_seated }} kids seated, {{ booking.num_kids_carried }} kids carried</dd></div>
+        <div><dt>Luggage</dt><dd>{{ booking.luggage_count }}</dd></div>
+        <div><dt>Phone</dt><dd>{{ booking.phone }} / {{ booking.email }}</dd></div>
+        <div><dt>Payment status</dt><dd>{{ payment_status }}</dd></div>
+      </dl>
+      <p>Call the driver/owner at {{ taxi_owner_phone }} to confirm the booking.</p>
+    </div>
   </body>
 </html>

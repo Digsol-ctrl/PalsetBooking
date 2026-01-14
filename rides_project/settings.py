@@ -6,12 +6,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-
+BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "change-me-in-production")
 
-#DEBUG = os.getenv("DJA
-# NGO_DEBUG", "True") == "True"
-DEBUG = 'FALSE'
+#DEBUG = os.getenv("DJANGO_DEBUG", "True") == "True"
+# Read DEBUG from environment; defaults to True for local development
+DEBUG = os.getenv("DJANGO_DEBUG", "True") == "True"
 
 ALLOWED_HOSTS = ["*"]
 
@@ -44,13 +44,14 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # WhiteNoise should be directly after SecurityMiddleware so it can serve static files early
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "whitenoise.middleware.WhiteNoiseMiddleware"
 ]
 
 ROOT_URLCONF = "rides_project.urls"
@@ -74,20 +75,27 @@ TEMPLATES = [
 WSGI_APPLICATION = "rides_project.wsgi.application"
 
 # Database
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.mysql",
-        "NAME": 'Palset$default',
-        "USER": 'Palset',
-        "PASSWORD": 'MySQL3041',
-        "HOST": "Palset.mysql.pythonanywhere-services.com",
-        'PORT': '3306',
+
+# Use local SQLite for development by default. To use the remote MySQL (e.g. on PythonAnywhere),
+# set USE_REMOTE_DB=True and provide DB_NAME, DB_USER, DB_PASSWORD, DB_HOST and optionally DB_PORT.
+if os.getenv("USE_REMOTE_DB", "False") == "True":
+    DATABASES = {
+        "default": {
+            "ENGINE": os.getenv("DB_ENGINE", "django.db.backends.mysql"),
+            "NAME": os.getenv("DB_NAME"),
+            "USER": os.getenv("DB_USER"),
+            "PASSWORD": os.getenv("DB_PASSWORD"),
+            "HOST": os.getenv("DB_HOST"),
+            "PORT": os.getenv("DB_PORT", "3306"),
+        }
     }
-}
-
-
-
-
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
+    }
 
 
 # Password validation
@@ -101,6 +109,8 @@ USE_TZ = True
 
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+# Include top-level project `static/` directory so collectstatic and static file finders see files
+STATICFILES_DIRS = [BASE_DIR / "static"]
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 
@@ -119,7 +129,13 @@ EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "enquiries@easytransit.co.zw")
 
 # Google Maps
-GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
+# New split keys: use a client key for browser (Maps JS + Places) and a server key for
+# server-to-server calls (Distance Matrix). For backwards compatibility the old
+# GOOGLE_MAPS_API_KEY env var is still accepted if either new var is not set.
+GOOGLE_MAPS_CLIENT_KEY = os.getenv("GOOGLE_MAPS_CLIENT_KEY", os.getenv("GOOGLE_MAPS_API_KEY", ""))
+GOOGLE_MAPS_SERVER_KEY = os.getenv("GOOGLE_MAPS_SERVER_KEY", os.getenv("GOOGLE_MAPS_API_KEY", ""))
+# Backwards-compatible single var retained for older deployments
+GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", GOOGLE_MAPS_CLIENT_KEY)
 # Cache timeout for distance results (seconds)
 GOOGLE_DISTANCE_CACHE_TIMEOUT = int(os.getenv("GOOGLE_DISTANCE_CACHE_TIMEOUT", str(6 * 3600)))
 
@@ -127,8 +143,8 @@ PAYNOW_INTEGRATION_ID='22865'
 PAYNOW_INTEGRATION_KEY='1aa3dd1c-5b72-4205-a3bc-f7a54906f3e5'
 
 
-PAYNOW_RETURN_URL='https://palset.pythonanywhere.com/rides/paynow/return/'
-PAYNOW_RESULT_URL='https://palset.pythonanywhere.com/rides/paynow/result/'
+PAYNOW_RETURN_URL = os.getenv("PAYNOW_RETURN_URL", f"{BASE_URL}/rides/paynow/return/")
+PAYNOW_RESULT_URL = os.getenv("PAYNOW_RESULT_URL", f"{BASE_URL}/rides/paynow/result/")
 PAYNOW_MERCHANT_EMAIL='mufambisitendaiblessed@gmail.com'
 # Set to False to disable TLS certificate verification for Paynow (use only for local testing)
 PAYNOW_VERIFY_SSL=False
@@ -154,3 +170,5 @@ PRICING = {
 
 # Use JSONField default for Django < 3.1 alternative
 DEFAULT_AUTO_FIELD = 'django.db.models.AutoField'
+
+
