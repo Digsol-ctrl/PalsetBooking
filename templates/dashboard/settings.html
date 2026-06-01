@@ -71,9 +71,9 @@
 
         <div class="row g-3 mb-3">
           <div class="col-sm-6">
-            <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">Minimum distance (km)</label>
+            <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">Minimum chargeable distance (km)</label>
             <input type="number" name="pricing_min_km" value="{{ site_settings.pricing_min_km }}" step="0.1" min="0" class="form-ctrl">
-            <div style="font-size:11px;color:#9ca3af;margin-top:4px">Trips shorter than this are charged at the first bracket price.</div>
+            <div style="font-size:11px;color:#9ca3af;margin-top:4px">Any trip shorter than this is priced as if it were this distance. Set this to the start of your first bracket (e.g. <strong>1</strong> if your first bracket starts at 1 km).</div>
           </div>
           <div class="col-sm-6">
             <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">Rate above <span id="aboveKmLabel">{{ last_bracket_max|floatformat:0 }}</span> km ($/km)</label>

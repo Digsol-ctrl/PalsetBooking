@@ -106,38 +106,57 @@ class PricingService:
 
         pricing_cfg = _get_pricing_cfg() or {}
 
-        # Determine base distance price
-        base_price = None
-        # Enforce minimum distance bracket
+        # Use configured brackets or defaults, sorted by min ascending
+        brackets = pricing_cfg.get("BRACKETS") or DEFAULT_PRICING["BRACKETS"]
+        try:
+            sorted_brackets = sorted(brackets, key=lambda b: float(b.get('min', 0)))
+        except Exception:
+            sorted_brackets = list(brackets)
+
+        # Enforce minimum chargeable distance
         min_km = Decimal(str(pricing_cfg.get("MIN_DISTANCE_KM", DEFAULT_PRICING["MIN_DISTANCE_KM"])))
         effective_distance = max(distance, min_km)
 
-        # Use configured brackets or defaults
-        brackets = pricing_cfg.get("BRACKETS") or DEFAULT_PRICING["BRACKETS"]
-        for bracket in brackets:
+        base_price = None
+
+        # 1. Try exact bracket match (min <= distance <= max)
+        for bracket in sorted_brackets:
             try:
                 if Decimal(str(bracket.get("min"))) <= effective_distance <= Decimal(str(bracket.get("max"))):
                     base_price = Decimal(str(bracket.get("price")))
                     break
             except Exception:
-                # Skip malformed bracket entries
                 logger.exception('Malformed pricing bracket: %s', bracket)
 
-        if base_price is None:
-            # If above 35, use special rule
-            if effective_distance > Decimal("35"):
-                last_bracket_price = (brackets or DEFAULT_PRICING["BRACKETS"])[-1]["price"]
-                base_35 = Decimal(str(last_bracket_price))
+        if base_price is None and sorted_brackets:
+            last_bracket = sorted_brackets[-1]
+            last_max = Decimal(str(last_bracket.get('max', 0)))
+            last_price = Decimal(str(last_bracket.get('price', 0)))
+
+            if effective_distance > last_max:
+                # 2. Above all brackets — per-km rate above the last bracket's max
                 per_km = Decimal(str(pricing_cfg.get("ABOVE_35_PER_KM", DEFAULT_PRICING["ABOVE_35_PER_KM"])))
-                extra_km = effective_distance - Decimal("35")
-                base_price = base_35 + (per_km * extra_km)
+                extra_km = effective_distance - last_max
+                base_price = last_price + (per_km * extra_km)
             else:
-                # Fallback: use first bracket price from config or defaults
-                try:
-                    first_price = brackets[0].get("price")
-                    base_price = Decimal(str(first_price))
-                except Exception:
-                    base_price = Decimal(str(DEFAULT_PRICING["BRACKETS"][0]["price"]))
+                # 3. Distance is in a gap between brackets (e.g. 20.6 km between a 17–20 and 21–25
+                #    bracket) or below the first bracket's min.
+                #    Use the highest bracket whose max < effective_distance (the lower tier).
+                best = None
+                for b in sorted_brackets:
+                    try:
+                        if Decimal(str(b.get('max', 0))) < effective_distance:
+                            best = b
+                    except Exception:
+                        pass
+                if best:
+                    base_price = Decimal(str(best.get('price', 0)))
+                else:
+                    # Below all brackets — use first bracket price as the floor
+                    base_price = Decimal(str(sorted_brackets[0].get('price', 0)))
+
+        if base_price is None:
+            base_price = Decimal(str(DEFAULT_PRICING["BRACKETS"][0]["price"]))
 
         # Extra adults
         base_passengers = int(pricing_cfg.get("BASE_PASSENGERS", DEFAULT_PRICING["BASE_PASSENGERS"]))
