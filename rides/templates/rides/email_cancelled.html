@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Booking Cancelled — EasyTransit</title>
+    <style>
+      body{margin:0;padding:0;background-color:#f2f8f9;font-family:Roboto,Arial,system-ui,sans-serif;color:#051e23;line-height:1.5}
+      .wrapper{max-width:600px;margin:24px auto;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 2px 12px rgba(5,30,35,.10)}
+      .header{background:linear-gradient(135deg,#ef4444 0%,#b91c1c 100%);padding:28px 32px;text-align:center}
+      .header h1{margin:0;color:#fff;font-size:22px;letter-spacing:.5px}
+      .header p{margin:4px 0 0;color:rgba(255,255,255,.85);font-size:13px}
+      .body{padding:28px 32px}
+      .body h2{margin:0 0 20px;color:#1c4b56;font-size:17px;border-bottom:2px solid #ef4444;padding-bottom:8px}
+      table{width:100%;border-collapse:collapse}
+      td{padding:8px 4px;vertical-align:top;font-size:14px;border-bottom:1px solid #e8f4f6}
+      td:first-child{font-weight:700;color:#1c4b56;width:38%;white-space:nowrap}
+      .footer{background:#1c4b56;padding:16px 32px;text-align:center}
+      .footer p{margin:0;color:rgba(255,255,255,.75);font-size:12px}
+    </style>
+  </head>
+  <body>
+    <div class="wrapper">
+      <div class="header">
+        <h1>EasyTransit</h1>
+        <p>Booking Cancelled</p>
+      </div>
+      <div class="body">
+        <h2>Booking {{ booking.reference|default:booking.id }} has been cancelled</h2>
+        <p style="font-size:14px;color:#4b7280;margin-top:0">
+          {% if booking.cancelled_by_customer %}
+            This booking was cancelled by the customer from their booking link.
+          {% else %}
+            This booking has been cancelled.
+          {% endif %}
+        </p>
+        <table>
+          <tr><td>Passenger</td><td>{% if booking.passenger_full_name %}{{ booking.salutation }} {{ booking.passenger_full_name }}{% else %}{{ booking.num_adults }} passenger(s){% endif %}</td></tr>
+          <tr><td>Phone / Email</td><td>{{ booking.phone }} / {{ booking.email }}</td></tr>
+          <tr><td>Pickup was</td><td>{{ booking.pickup_address }} on {{ booking.pickup_date }} at {{ booking.pickup_time }}</td></tr>
+          <tr><td>Dropoff</td><td>{{ booking.dropoff_address }}</td></tr>
+          {% if booking.is_return_trip %}
+          <tr><td>Return was</td><td>{{ booking.return_date }} at {{ booking.return_time }}</td></tr>
+          {% endif %}
+          <tr><td>Fare</td><td>${{ booking.total_amount }}</td></tr>
+          <tr><td>Cancelled at</td><td>{{ booking.cancelled_at }}</td></tr>
+        </table>
+        {% if dashboard_url %}
+        <p style="margin-top:20px;text-align:center;">
+          <a href="{{ dashboard_url }}" style="display:inline-block;background:#1c4b56;color:#fff;text-decoration:none;padding:10px 24px;border-radius:6px;font-weight:700;font-size:14px;">
+            View in Dashboard &rarr;
+          </a>
+        </p>
+        {% endif %}
+        <p style="margin-top:16px;font-size:13px;color:#4b7280">
+          Booked in error, or need a new ride? Call us on <strong>{{ taxi_owner_phone }}</strong> and we&rsquo;ll sort you out.
+        </p>
+      </div>
+      <div class="footer">
+        <p>EasyTransit | enquiries@easytransit.co.zw | {{ taxi_owner_phone }}</p>
+      </div>
+    </div>
+  </body>
+</html>

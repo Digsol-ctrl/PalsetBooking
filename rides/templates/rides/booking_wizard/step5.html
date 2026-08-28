@@ -105,13 +105,62 @@
             </div>
             {% endif %}
 
-            <!-- Luggage -->
-            {% if booking.num_luggage_bags > 0 %}
+            <!-- Baby car seats -->
+            {% if booking.baby_car_seater > 0 %}
                 <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid white; padding-bottom: 8px;">
-                    <span>Luggage:</span>
-                    <strong>{{ booking.luggage_count }} bag(s)</strong>
+                    <span>Baby car seats:</span>
+                    <strong>{{ booking.baby_car_seater }}</strong>
                 </div>
             {% endif %}
+
+            <!-- Luggage -->
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid white; padding-bottom: 8px;">
+                <span>Luggage:</span>
+                <strong>{{ booking.luggage_count }} bag(s){% if booking.hand_luggage_count %}, {{ booking.hand_luggage_count }} hand luggage{% endif %}</strong>
+            </div>
+
+            <!-- Return trip -->
+            {% if booking.is_return_trip %}
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid white; padding-bottom: 8px;">
+                <span>Return trip:</span>
+                <strong>{{ booking.return_date }} at {{ booking.return_time }}</strong>
+            </div>
+            {% if booking.price_breakdown.return_leg_fee %}
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid white; padding-bottom: 8px;">
+                <span>Return leg fare:</span>
+                <strong>${{ booking.price_breakdown.return_leg_fee|floatformat:2 }}</strong>
+            </div>
+            {% endif %}
+            {% endif %}
+
+            <!-- Stops along the way -->
+            {% if booking.stops_json %}
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid white; padding-bottom: 8px;">
+                <span>Stops:</span>
+                <div style="text-align: right; max-width: 65%;">
+                    {% for stop in booking.stops_json %}
+                    <div style="font-weight: 600; font-size: 13px;">
+                        {{ forloop.counter }}. {{ stop.description|default:"Stop" }} &mdash; up to {{ stop.minutes }} min
+                        ({% if stop.fee %}${{ stop.fee|floatformat:2 }}{% else %}Free{% endif %})
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Night surcharge -->
+            {% if booking.price_breakdown.night_surcharge %}
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid white; padding-bottom: 8px;">
+                <span>Night pickup surcharge:</span>
+                <strong>${{ booking.price_breakdown.night_surcharge|floatformat:2 }}</strong>
+            </div>
+            {% endif %}
+
+            <!-- Payment method -->
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid white; padding-bottom: 8px;">
+                <span>Payment method:</span>
+                <strong>{{ booking.get_payment_option_display }}</strong>
+            </div>
 
             <!-- Special Notes -->
             {% if booking.extra_instructions %}

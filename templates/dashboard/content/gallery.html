@@ -1,0 +1,116 @@
+{% extends "dashboard/base.html" %}
+{% block title %}Gallery — Easy Transit Dashboard{% endblock %}
+{% block page_title %}Gallery{% endblock %}
+
+{% block content %}
+<div style="font-size:13px;color:#6b7280;margin-bottom:18px">
+  Photos appear on the public <a href="{% url 'content:gallery' %}" target="_blank" style="color:#059652;font-weight:600">Gallery page</a>,
+  grouped by album. Hide a photo to take it off the site without deleting it.
+</div>
+
+{% if can_edit %}
+<div class="dash-card mb-3">
+  <div class="dash-card-header">
+    <i class="bi bi-cloud-arrow-up-fill me-2" style="color:#10b981"></i>Add a photo
+  </div>
+  <div class="dash-card-body">
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+
+      {% if form.errors %}
+      <div style="background:#fee2e2;border:1px solid #fecaca;border-radius:8px;padding:11px 14px;font-size:13px;color:#991b1b;margin-bottom:16px">
+        {% for field, errors in form.errors.items %}
+          {% for error in errors %}<div>{{ field }}: {{ error }}</div>{% endfor %}
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <datalist id="album_options">
+        {% for album in albums %}<option value="{{ album }}">{% endfor %}
+      </datalist>
+
+      <div class="row g-3 mb-3">
+        <div class="col-sm-6">
+          <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">Photo</label>
+          {{ form.image }}
+          <div style="font-size:11px;color:#9ca3af;margin-top:4px">JPG, PNG, WEBP or GIF, up to 8MB.</div>
+        </div>
+        <div class="col-sm-6">
+          <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">Album <span style="font-weight:400;color:#9ca3af">(optional)</span></label>
+          {{ form.album }}
+          <div style="font-size:11px;color:#9ca3af;margin-top:4px">Photos sharing an album name show together, e.g. &ldquo;Victoria Falls trip&rdquo;.</div>
+        </div>
+      </div>
+
+      <div class="row g-3 mb-3">
+        <div class="col-sm-5">
+          <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">Title <span style="font-weight:400;color:#9ca3af">(optional)</span></label>
+          {{ form.title }}
+        </div>
+        <div class="col-sm-5">
+          <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">Caption <span style="font-weight:400;color:#9ca3af">(optional)</span></label>
+          {{ form.caption }}
+        </div>
+        <div class="col-sm-2">
+          <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">Order</label>
+          {{ form.sort_order }}
+        </div>
+      </div>
+
+      <button type="submit" class="btn-green"><i class="bi bi-upload me-2"></i>Add photo</button>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+<div class="dash-card">
+  <div class="dash-card-header">
+    <i class="bi bi-images me-2" style="color:#0ea5e9"></i>All photos ({{ images|length }})
+  </div>
+  <div class="dash-card-body">
+    {% if images %}
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:16px">
+      {% for image in images %}
+      <div style="border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;background:#fff;{% if not image.is_published %}opacity:.6{% endif %}">
+        <img src="{{ image.image.url }}" alt="{{ image.title }}"
+             style="width:100%;height:150px;object-fit:cover;display:block;background:#f3f4f6" loading="lazy">
+        <div style="padding:10px 12px">
+          {% if image.title %}<div style="font-size:13px;font-weight:600;color:#111827">{{ image.title }}</div>{% endif %}
+          {% if image.album %}
+          <div style="font-size:11px;color:#0369a1;background:#f0f9ff;display:inline-block;padding:2px 8px;border-radius:9px;margin-top:3px">{{ image.album }}</div>
+          {% endif %}
+          {% if image.caption %}<div style="font-size:11.5px;color:#6b7280;margin-top:4px">{{ image.caption|truncatechars:52 }}</div>{% endif %}
+          <div style="font-size:11px;color:#9ca3af;margin-top:5px">
+            Order {{ image.sort_order }} &middot;
+            {% if image.is_published %}<span style="color:#059652;font-weight:600">Visible</span>{% else %}<span style="color:#b45309;font-weight:600">Hidden</span>{% endif %}
+          </div>
+
+          {% if can_edit %}
+          <div style="display:flex;gap:6px;margin-top:9px">
+            <form method="post" action="{% url 'dashboard_content:gallery_toggle' image.pk %}" style="flex:1">
+              {% csrf_token %}
+              <button type="submit" style="width:100%;background:#f3f4f6;color:#374151;border:none;border-radius:6px;padding:5px;font-size:11.5px;font-weight:600;cursor:pointer">
+                {% if image.is_published %}Hide{% else %}Show{% endif %}
+              </button>
+            </form>
+            <form method="post" action="{% url 'dashboard_content:gallery_delete' image.pk %}" style="flex:1"
+                  onsubmit="return confirm('Delete this photo permanently?');">
+              {% csrf_token %}
+              <button type="submit" style="width:100%;background:#fee2e2;color:#991b1b;border:none;border-radius:6px;padding:5px;font-size:11.5px;font-weight:600;cursor:pointer">Delete</button>
+            </form>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div style="padding:40px 24px;text-align:center;color:#9ca3af">
+      <i class="bi bi-images" style="font-size:32px;display:block;margin-bottom:12px"></i>
+      <strong style="color:#6b7280">No photos yet</strong>
+      <p style="font-size:13px;margin-top:6px">Add your first photo using the form above.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

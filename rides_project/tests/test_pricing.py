@@ -1,4 +1,4 @@
-from rides.services.pricing import PricingService
+from rides.services.pricing import PricingService, DEFAULT_PRICING
 from decimal import Decimal
 
 
@@ -10,9 +10,14 @@ def test_pricing_brackets():
 
 
 def test_pricing_above_35():
-    # 40 km => base = 40 + 1.3*(40-35) = 40 + 6.5 = 46.5
+    # Past the last bracket, the fare is that bracket's price plus a per-km rate.
+    # Both come from configuration, so derive the expectation rather than hard-coding
+    # a rate that goes stale whenever the dashboard values change.
+    last = max(DEFAULT_PRICING['BRACKETS'], key=lambda b: b['max'])
+    expected = last['price'] + DEFAULT_PRICING['ABOVE_35_PER_KM'] * (40 - last['max'])
+
     out = PricingService.calculate(distance_km=40, num_adults=1)
-    assert round(out['base_distance_price'], 2) == 46.5
+    assert round(out['base_distance_price'], 2) == round(expected, 2)
 
 
 def test_extra_adults_and_luggage():

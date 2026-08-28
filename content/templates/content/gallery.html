@@ -1,0 +1,118 @@
+{% extends "content/base_public.html" %}
+
+{% block title %}Gallery - Easy Transit{% endblock %}
+{% block meta_description %}Photos from Easy Transit trips across Zimbabwe.{% endblock %}
+
+{% block extra_css %}
+        .album { margin-bottom: 40px; }
+        .album h2 {
+            font-size: 19px; font-weight: 700; color: #0f2a47; margin-bottom: 4px;
+            display: flex; align-items: center; gap: 9px;
+        }
+        .album h2 i { color: #10b981; }
+        .album-count { font-size: 13px; color: #94a3b8; margin-bottom: 15px; }
+
+        .photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 15px; }
+        .photo {
+            background: #fff; border-radius: 12px; overflow: hidden;
+            box-shadow: 0 3px 14px rgba(15,42,71,.09);
+            cursor: zoom-in; border: none; padding: 0; text-align: left; width: 100%;
+            transition: transform .2s ease, box-shadow .2s ease;
+        }
+        .photo:hover { transform: translateY(-3px); box-shadow: 0 8px 24px rgba(15,42,71,.17); }
+        .photo img { width: 100%; height: 185px; object-fit: cover; display: block; background: #e2e8f0; }
+        .photo-meta { padding: 11px 13px 14px; }
+        .photo-meta strong { display: block; font-size: 14px; color: #0f2a47; }
+        .photo-meta span { font-size: 12.5px; color: #64748b; }
+
+        /* Lightbox */
+        .lightbox {
+            display: none; position: fixed; inset: 0; z-index: 900;
+            background: rgba(6,20,33,.93); padding: 24px;
+            align-items: center; justify-content: center;
+        }
+        .lightbox.open { display: flex; }
+        .lightbox img { max-width: 100%; max-height: 82vh; border-radius: 10px; display: block; }
+        .lightbox-inner { max-width: 960px; text-align: center; }
+        .lightbox-caption { color: rgba(255,255,255,.85); font-size: 14px; margin-top: 13px; }
+        .lightbox-close {
+            position: absolute; top: 18px; right: 22px;
+            background: rgba(255,255,255,.14); color: #fff; border: none;
+            width: 40px; height: 40px; border-radius: 50%; font-size: 20px; cursor: pointer;
+        }
+        .lightbox-close:hover { background: rgba(255,255,255,.28); }
+{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Gallery</h1>
+<p class="page-sub">
+    {% if total_images %}
+        {{ total_images }} photo{{ total_images|pluralize }} from the road.
+    {% else %}
+        Photos from our trips will appear here.
+    {% endif %}
+</p>
+
+{% if albums %}
+    {% for album_name, images in albums %}
+    <section class="album">
+        <h2><i class="bi bi-images"></i> {{ album_name }}</h2>
+        <p class="album-count">{{ images|length }} photo{{ images|length|pluralize }}</p>
+        <div class="photo-grid">
+            {% for image in images %}
+            <button type="button" class="photo"
+                    data-src="{{ image.image.url }}"
+                    data-caption="{% if image.title %}{{ image.title }}{% endif %}{% if image.caption %} &mdash; {{ image.caption }}{% endif %}">
+                <img src="{{ image.image.url }}" alt="{{ image.title|default:album_name }}" loading="lazy">
+                {% if image.title or image.caption %}
+                <div class="photo-meta">
+                    {% if image.title %}<strong>{{ image.title }}</strong>{% endif %}
+                    {% if image.caption %}<span>{{ image.caption }}</span>{% endif %}
+                </div>
+                {% endif %}
+            </button>
+            {% endfor %}
+        </div>
+    </section>
+    {% endfor %}
+{% else %}
+    <div class="empty">
+        <i class="bi bi-images"></i>
+        <strong>No photos yet</strong>
+        <p style="margin-top:6px">We&rsquo;re busy collecting them &mdash; check back soon.</p>
+    </div>
+{% endif %}
+
+<div class="lightbox" id="lightbox">
+    <button type="button" class="lightbox-close" id="lightboxClose" aria-label="Close">&times;</button>
+    <div class="lightbox-inner">
+        <img id="lightboxImg" src="" alt="">
+        <div class="lightbox-caption" id="lightboxCaption"></div>
+    </div>
+</div>
+
+<script>
+    (function () {
+        const box = document.getElementById('lightbox');
+        const img = document.getElementById('lightboxImg');
+        const caption = document.getElementById('lightboxCaption');
+
+        function close() {
+            box.classList.remove('open');
+            img.src = '';
+        }
+
+        document.querySelectorAll('.photo').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                img.src = btn.dataset.src;
+                caption.innerHTML = btn.dataset.caption || '';
+                box.classList.add('open');
+            });
+        });
+
+        document.getElementById('lightboxClose').addEventListener('click', close);
+        box.addEventListener('click', function (e) { if (e.target === box) close(); });
+        document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
+    })();
+</script>
+{% endblock %}

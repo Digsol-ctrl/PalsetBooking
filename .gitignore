@@ -10,3 +10,6 @@ rideenv/
 ".env"
 staticfiles/
 .claude/
+
+# Uploaded blog/gallery images
+media/

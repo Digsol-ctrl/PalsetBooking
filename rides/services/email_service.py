@@ -11,6 +11,16 @@ def _dashboard_url(booking):
     return f"{base}/dashboard/bookings/{booking.id}/"
 
 
+def _manage_url(booking):
+    """Signed self-service link for the customer, or empty if it cannot be built."""
+    try:
+        from rides.services.booking_access import manage_url
+        return manage_url(booking)
+    except Exception:
+        logger.exception('Could not build manage link for booking %s', getattr(booking, 'id', '?'))
+        return ''
+
+
 class EmailService:
     @staticmethod
     def send_owner_notification(booking, payment_status: str = "UNPAID"):
@@ -60,6 +70,7 @@ class EmailService:
             "booking": booking,
             "payment_status": payment_status,
             "taxi_owner_phone": settings.TAXI_OWNER_PHONE,
+            "manage_url": _manage_url(booking),
         }
 
         text = render_to_string("rides/email_customer.txt", context)
@@ -79,6 +90,73 @@ class EmailService:
             logger.info('Customer notification sent for booking %s', booking.id)
         except Exception as e:
             logger.error('Failed to send customer notification for booking %s: %s', booking.id, str(e))
+
+    @staticmethod
+    def send_booking_cancelled(booking):
+        """Tell both the customer and the owner that a booking was cancelled."""
+        ref = getattr(booking, 'reference', None) or str(booking.id)
+        context = {
+            "booking": booking,
+            "taxi_owner_phone": settings.TAXI_OWNER_PHONE,
+            "dashboard_url": _dashboard_url(booking),
+        }
+        html = render_to_string("rides/email_cancelled.html", context)
+        text = (
+            f"Booking {ref} has been cancelled.\n\n"
+            f"Pickup was: {booking.pickup_address} on {booking.pickup_date} at {booking.pickup_time}\n"
+            f"Dropoff: {booking.dropoff_address}\n"
+        )
+
+        recipients = [settings.TAXI_OWNER_EMAIL]
+        if getattr(booking, 'email', None):
+            recipients.append(booking.email)
+
+        try:
+            send_mail(
+                f"Booking Cancelled: {ref} - Easy Transit",
+                text,
+                settings.DEFAULT_FROM_EMAIL,
+                recipients,
+                html_message=html,
+            )
+            logger.info('Cancellation notice sent for booking %s', booking.id)
+        except Exception as e:
+            logger.error('Failed to send cancellation notice for booking %s: %s', booking.id, str(e))
+
+    @staticmethod
+    def send_booking_rescheduled(booking, detail: str = ''):
+        """Tell both the customer and the owner that a booking moved."""
+        ref = getattr(booking, 'reference', None) or str(booking.id)
+        context = {
+            "booking": booking,
+            "change_detail": detail,
+            "taxi_owner_phone": settings.TAXI_OWNER_PHONE,
+            "dashboard_url": _dashboard_url(booking),
+            "manage_url": _manage_url(booking),
+        }
+        html = render_to_string("rides/email_rescheduled.html", context)
+        text = (
+            f"Booking {ref} has been changed.\n\n"
+            f"{detail}\n\n"
+            f"New pickup: {booking.pickup_address} on {booking.pickup_date} at {booking.pickup_time}\n"
+            f"Total: ${booking.total_amount}\n"
+        )
+
+        recipients = [settings.TAXI_OWNER_EMAIL]
+        if getattr(booking, 'email', None):
+            recipients.append(booking.email)
+
+        try:
+            send_mail(
+                f"Booking Updated: {ref} - Easy Transit",
+                text,
+                settings.DEFAULT_FROM_EMAIL,
+                recipients,
+                html_message=html,
+            )
+            logger.info('Reschedule notice sent for booking %s', booking.id)
+        except Exception as e:
+            logger.error('Failed to send reschedule notice for booking %s: %s', booking.id, str(e))
 
     @staticmethod
     def send_payment_confirmation(booking):

@@ -109,21 +109,56 @@
             Next: Passengers <i class="bi bi-arrow-right"></i>
         </button>
     </div>
+
+    <div id="schedule_error" class="error-message"
+         style="display:none;margin-top:12px;padding:10px 14px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;color:#991b1b;font-weight:600;"></div>
 </form>
 {% endblock %}
 
 {% block extra_js %}
 <script>
+// --- Past date/time guard ---------------------------------------------------
+// Mirrors the server-side check; a lapsed date or time can never be booked.
+function localTodayISO() {
+    const now = new Date();
+    return new Date(now - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+
+function isFutureSchedule(dateValue, timeValue) {
+    if (!dateValue || !timeValue) return false;
+    const scheduled = new Date(`${dateValue}T${timeValue}`);
+    if (isNaN(scheduled.getTime())) return false;
+    return scheduled.getTime() >= Date.now();
+}
+
+function showScheduleError(message) {
+    const box = document.getElementById('schedule_error');
+    if (!box) return;
+    box.textContent = message || '';
+    box.style.display = message ? 'block' : 'none';
+}
+
 function checkEnableSubmit() {
     const addr = document.getElementById('chauffeur_pickup_address').value.trim();
     const lat = document.getElementById('chauffeur_pickup_latitude').value;
     const date = document.getElementById('chauffeur_pickup_date').value;
     const time = document.getElementById('chauffeur_pickup_time').value;
-    document.getElementById('submit_btn').disabled = !(addr && lat && date && time);
+
+    let scheduleValid = Boolean(date && time);
+    if (scheduleValid && !isFutureSchedule(date, time)) {
+        scheduleValid = false;
+        showScheduleError('That pickup date and time have already passed. Please choose a future date and time.');
+    } else {
+        showScheduleError('');
+    }
+
+    document.getElementById('submit_btn').disabled = !(addr && lat && scheduleValid);
 }
 
 // Pre-enable if returning with valid data
 window.addEventListener('load', function () {
+    const dateEl = document.getElementById('chauffeur_pickup_date');
+    if (dateEl) dateEl.setAttribute('min', localTodayISO());
     checkEnableSubmit();
 
     if (typeof google === 'undefined') return;

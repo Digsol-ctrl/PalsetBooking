@@ -57,6 +57,49 @@
                 {% endif %}
             {% endif %}
 
+            {% if fare_breakdown.hand_luggage_count > 0 %}
+                <div class="fare-row">
+                    <span><i class="bi bi-handbag"></i> Hand Luggage ({{ fare_breakdown.hand_luggage_count }} item{{ fare_breakdown.hand_luggage_count|pluralize }}):</span>
+                    <strong>{% if fare_breakdown.hand_luggage_fee > 0 %}${{ fare_breakdown.hand_luggage_fee|floatformat:2 }}{% else %}Free{% endif %}</strong>
+                </div>
+            {% endif %}
+
+            {% if fare_breakdown.stops_count > 0 %}
+                <div class="fare-row">
+                    <span><i class="bi bi-signpost-split"></i> Stops along the way ({{ fare_breakdown.stops_count }}):</span>
+                    <strong>${{ fare_breakdown.stops_fee|floatformat:2 }}</strong>
+                </div>
+                {% for stop in fare_breakdown.stops %}
+                    <div class="fare-row" style="font-size: 12px; color: #666; margin-left: 20px;">
+                        <span>{{ forloop.counter }}. {{ stop.description|default:"Stop" }} &mdash; up to {{ stop.minutes }} min</span>
+                        <span>{% if stop.fee > 0 %}${{ stop.fee|floatformat:2 }}{% else %}Free{% endif %}</span>
+                    </div>
+                {% endfor %}
+            {% endif %}
+
+            {% if fare_breakdown.night_surcharge > 0 %}
+                <div class="fare-row">
+                    <span><i class="bi bi-moon-stars"></i> Night pickup surcharge:</span>
+                    <strong>${{ fare_breakdown.night_surcharge|floatformat:2 }}</strong>
+                </div>
+                <div class="fare-row" style="font-size: 12px; color: #666; margin-left: 20px;">
+                    <span>Applies to pickups between {{ night_cfg.START|time:"H:i" }} and {{ night_cfg.END|time:"H:i" }}</span>
+                </div>
+            {% endif %}
+
+            {% if fare_breakdown.is_return_trip %}
+                <div class="fare-row">
+                    <span><i class="bi bi-arrow-left-right"></i> Return leg{% if fare_breakdown.return_discount_percent %} (less {{ fare_breakdown.return_discount_percent|floatformat:"-2" }}%){% endif %}:</span>
+                    <strong>${{ fare_breakdown.return_leg_fee|floatformat:2 }}</strong>
+                </div>
+                {% if fare_breakdown.return_night_surcharge > 0 %}
+                <div class="fare-row">
+                    <span><i class="bi bi-moon-stars"></i> Night return surcharge:</span>
+                    <strong>${{ fare_breakdown.return_night_surcharge|floatformat:2 }}</strong>
+                </div>
+                {% endif %}
+            {% endif %}
+
             <div class="fare-row total">
                 <span>Total Estimated Fare:</span>
                 <strong>${{ fare_breakdown.total|floatformat:2 }}</strong>
@@ -69,44 +112,201 @@
         </div>
     {% endif %}
 
-    <!-- Your Details Review -->
-    {% if step3_data %}
-    <div style="background: #f0f7ff; border-radius: 8px; padding: 16px; margin-bottom: 20px; border-left: 4px solid #1e3a5f;">
-        <h4 style="font-size: 14px; font-weight: 700; color: #1e3a5f; margin-bottom: 12px;">
-            <i class="bi bi-person-check"></i> Your Details
-        </h4>
-        <div style="display: grid; gap: 8px; font-size: 14px;">
-            {% if step3_data.passenger_full_name %}
-            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #dce9f5; padding-bottom: 6px;">
-                <span style="color: #555;">Passenger Name:</span>
-                <strong>{% if step3_data.salutation %}{{ step3_data.salutation }} {% endif %}{{ step3_data.passenger_full_name }}</strong>
+    <!-- Full Booking Review -->
+    <div class="review-panel">
+        <div class="review-panel-head">
+            <h4><i class="bi bi-clipboard-check"></i> Check your booking</h4>
+            <p>Please make sure everything below is right before you confirm.</p>
+        </div>
+
+        <!-- Trip -->
+        <div class="review-section">
+            <div class="review-section-head">
+                <span><i class="bi bi-geo-alt"></i> Trip</span>
+                <a href="{% url 'rides:booking_wizard' step=1 %}">Edit</a>
+            </div>
+            <div class="review-row"><span>Pickup</span><strong>{{ step1_data.pickup_address }}</strong></div>
+            <div class="review-row"><span>Dropoff</span><strong>{{ step1_data.dropoff_address }}</strong></div>
+            <div class="review-row">
+                <span>Pickup date &amp; time</span>
+                <strong>{{ step1_data.pickup_date }} at {{ step1_data.pickup_time }}</strong>
+            </div>
+            {% if step1_data.pickup_is_airport %}
+            <div class="review-row"><span>Airport pickup</span><strong>Yes</strong></div>
+            <div class="review-row">
+                <span>Flight</span>
+                <strong>{{ step1_data.arrival_airline }} {{ step1_data.arrival_flight_number }}</strong>
+            </div>
+            <div class="review-row">
+                <span>Arrival</span>
+                <strong>{{ step1_data.arrival_date }} at {{ step1_data.arrival_time }}</strong>
             </div>
             {% endif %}
-            {% if step3_data.phone %}
-            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #dce9f5; padding-bottom: 6px;">
-                <span style="color: #555;">Phone:</span>
-                <strong>{{ step3_data.phone }}</strong>
-            </div>
-            {% endif %}
-            {% if step3_data.email %}
-            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #dce9f5; padding-bottom: 6px;">
-                <span style="color: #555;">Email:</span>
-                <strong>{{ step3_data.email }}</strong>
-            </div>
-            {% endif %}
-            {% if step3_data.extra_instructions %}
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 4px;">
-                <span style="color: #555; white-space: nowrap; margin-right: 12px;">Additional Notes:</span>
-                <span style="font-weight: 600; text-align: right; max-width: 62%; font-size: 13px; background: #fff8e1; padding: 4px 8px; border-radius: 4px; border-left: 3px solid #f59e0b;">{{ step3_data.extra_instructions }}</span>
+            {% if step1_data.is_return_trip %}
+            <div class="review-row">
+                <span>Return trip</span>
+                <strong>{{ step1_data.return_date }} at {{ step1_data.return_time }}</strong>
             </div>
             {% else %}
-            <div style="font-size: 13px; color: #888;">
-                <i class="bi bi-info-circle"></i> No additional notes added. <a href="{% url 'rides:booking_wizard' step=3 %}" style="color: #1e3a5f;">Go back to add notes</a>
+            <div class="review-row"><span>Return trip</span><strong>No &mdash; one way only</strong></div>
+            {% endif %}
+            {% if fare_breakdown.is_night_pickup %}
+            <div class="review-note review-note-night">
+                <i class="bi bi-moon-stars"></i>
+                This is a night pickup ({{ night_cfg.START|time:"H:i" }}&ndash;{{ night_cfg.END|time:"H:i" }}), so a
+                ${{ fare_breakdown.night_surcharge|floatformat:2 }} surcharge applies.
+            </div>
+            {% endif %}
+            {% if fare_breakdown.is_night_return %}
+            <div class="review-note review-note-night">
+                <i class="bi bi-moon-stars"></i>
+                Your return is also a night pickup, so a further
+                ${{ fare_breakdown.return_night_surcharge|floatformat:2 }} surcharge applies.
             </div>
             {% endif %}
         </div>
+
+        <!-- Passengers & luggage -->
+        <div class="review-section">
+            <div class="review-section-head">
+                <span><i class="bi bi-people"></i> Passengers &amp; luggage</span>
+                <a href="{% url 'rides:booking_wizard' step=2 %}">Edit</a>
+            </div>
+            <div class="review-row">
+                <span>Passengers seated</span>
+                <strong>{{ step2_data.num_adults|default:1 }}</strong>
+            </div>
+            {% if step2_data.num_kids_carried %}
+            <div class="review-row"><span>Kids carried</span><strong>{{ step2_data.num_kids_carried }}</strong></div>
+            {% endif %}
+            {% if step2_data.baby_car_seater %}
+            <div class="review-row"><span>Baby car seats</span><strong>{{ step2_data.baby_car_seater }}</strong></div>
+            {% endif %}
+            <div class="review-row"><span>Luggage bags</span><strong>{{ step2_data.luggage_count|default:0 }}</strong></div>
+            <div class="review-row"><span>Hand luggage</span><strong>{{ step2_data.hand_luggage_count|default:0 }}</strong></div>
+            <div class="review-row">
+                <span>Booked by</span>
+                <strong>{% if step2_data.salutation %}{{ step2_data.salutation }} {% endif %}{{ step2_data.passenger_full_name }}</strong>
+            </div>
+        </div>
+
+        <!-- Stops -->
+        <div class="review-section">
+            <div class="review-section-head">
+                <span><i class="bi bi-signpost-split"></i> Stops along the way</span>
+                <a href="{% url 'rides:booking_wizard' step=2 %}">Edit</a>
+            </div>
+            {% if fare_breakdown.stops %}
+                {% for stop in fare_breakdown.stops %}
+                <div class="review-row">
+                    <span>{{ forloop.counter }}. {{ stop.description|default:"Stop" }}</span>
+                    <strong>up to {{ stop.minutes }} min &mdash; {% if stop.fee > 0 %}${{ stop.fee|floatformat:2 }}{% else %}Free{% endif %}</strong>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="review-empty">No stops added &mdash; the driver will go straight to your dropoff.</div>
+            {% endif %}
+        </div>
+
+        <!-- Contact -->
+        <div class="review-section">
+            <div class="review-section-head">
+                <span><i class="bi bi-person-check"></i> Contact details</span>
+                <a href="{% url 'rides:booking_wizard' step=3 %}">Edit</a>
+            </div>
+            <div class="review-row"><span>Phone</span><strong>{{ step3_data.phone }}</strong></div>
+            <div class="review-row"><span>Email</span><strong>{{ step3_data.email }}</strong></div>
+            {% if step3_data.extra_instructions %}
+            <div class="review-row">
+                <span>Additional notes</span>
+                <strong class="review-note-text">{{ step3_data.extra_instructions }}</strong>
+            </div>
+            {% else %}
+            <div class="review-empty">No additional notes added.</div>
+            {% endif %}
+        </div>
     </div>
-    {% endif %}
+
+    <style>
+        .review-panel {
+            background: #fff;
+            border: 1px solid #dbe6f0;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+        .review-panel-head {
+            background: #f0f7ff;
+            padding: 14px 16px;
+            border-bottom: 1px solid #dbe6f0;
+        }
+        .review-panel-head h4 {
+            margin: 0;
+            font-size: 15px;
+            font-weight: 700;
+            color: #1e3a5f;
+        }
+        .review-panel-head p {
+            margin: 4px 0 0;
+            font-size: 12px;
+            color: #64748b;
+        }
+        .review-section { padding: 12px 16px; border-bottom: 1px solid #eef2f7; }
+        .review-section:last-child { border-bottom: none; }
+        .review-section-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .review-section-head span {
+            font-size: 13px;
+            font-weight: 700;
+            color: #1e3a5f;
+            text-transform: uppercase;
+            letter-spacing: .3px;
+        }
+        .review-section-head a {
+            font-size: 12px;
+            font-weight: 600;
+            color: #2563eb;
+            text-decoration: none;
+            background: #eff6ff;
+            padding: 3px 12px;
+            border-radius: 12px;
+        }
+        .review-section-head a:hover { background: #dbeafe; }
+        .review-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 14px;
+            font-size: 14px;
+            padding: 5px 0;
+        }
+        .review-row span { color: #64748b; flex-shrink: 0; }
+        .review-row strong { text-align: right; color: #0f172a; font-weight: 600; }
+        .review-note-text {
+            font-size: 13px;
+            background: #fff8e1;
+            padding: 4px 8px;
+            border-radius: 4px;
+            border-left: 3px solid #f59e0b;
+            max-width: 62%;
+        }
+        .review-empty { font-size: 13px; color: #94a3b8; padding: 3px 0; }
+        .review-note {
+            margin-top: 8px;
+            font-size: 13px;
+            padding: 8px 12px;
+            border-radius: 6px;
+        }
+        .review-note-night {
+            background: #eef2ff;
+            border-left: 3px solid #6366f1;
+            color: #3730a3;
+        }
+    </style>
 
     <!-- Payment Method Selection -->
     <div class="form-group">
@@ -160,6 +360,7 @@
             </label>
         </div>
 
+        {% if paynow_allowed %}
         <div class="payment-option">
             <label style="display: flex; align-items: center; gap: 12px; cursor: pointer; margin-bottom: 0;">
                 <input type="radio" name="payment_method" value="PAYNOW" required>
@@ -171,6 +372,23 @@
                 </span>
             </label>
         </div>
+        {% else %}
+        <div class="payment-option" style="opacity: .6; cursor: not-allowed; background: #f9fafb;">
+            <label style="display: flex; align-items: center; gap: 12px; cursor: not-allowed; margin-bottom: 0;">
+                <input type="radio" name="payment_method" value="PAYNOW" disabled>
+                <span>
+                    <strong>Pay Online (Paynow) — not available for this amount</strong>
+                    <div style="font-size: 13px; color: #666; margin-top: 4px;">
+                        Available on bookings of ${{ paynow_rule.MIN_AMOUNT|floatformat:0 }} and above
+                    </div>
+                </span>
+            </label>
+        </div>
+        <div class="info-box" style="background: #eff6ff; border-left: 4px solid #2563eb;">
+            <i class="bi bi-info-circle"></i>
+            {{ paynow_rule.NOTE }}
+        </div>
+        {% endif %}
 
         {% if form.payment_method.errors %}
             <div class="error-message" style="margin-top: 8px;">

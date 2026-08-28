@@ -42,8 +42,31 @@
           {% endif %}
           <tr><td>Dropoff</td><td>{{ booking.dropoff_address }}</td></tr>
           <tr><td>Distance</td><td>{{ booking.distance_km }} km</td></tr>
-          <tr><td>Passengers</td><td>{{ booking.num_adults }} adult(s){% if booking.num_kids_carried %}, {{ booking.num_kids_carried }} kid(s) carried{% endif %}</td></tr>
-          <tr><td>Luggage</td><td>{{ booking.luggage_count }}</td></tr>
+          <tr><td>Passengers</td><td>{{ booking.num_adults }} seated{% if booking.num_kids_carried %}, {{ booking.num_kids_carried }} kid(s) carried{% endif %}</td></tr>
+          {% if booking.baby_car_seater %}<tr><td>Baby car seats</td><td>{{ booking.baby_car_seater }}</td></tr>{% endif %}
+          <tr><td>Luggage bags</td><td>{{ booking.luggage_count }}</td></tr>
+          <tr><td>Hand luggage</td><td>{{ booking.hand_luggage_count }}</td></tr>
+          {% if booking.is_return_trip %}
+          <tr><td>Return trip</td><td>{{ booking.return_date }} at {{ booking.return_time }}</td></tr>
+          {% if booking.price_breakdown.return_leg_fee %}
+          <tr><td>Return leg fare</td><td>${{ booking.price_breakdown.return_leg_fee|floatformat:2 }}</td></tr>
+          {% endif %}
+          {% if booking.price_breakdown.return_night_surcharge %}
+          <tr><td>Night return surcharge</td><td>${{ booking.price_breakdown.return_night_surcharge|floatformat:2 }}</td></tr>
+          {% endif %}
+          {% endif %}
+          {% if booking.stops_json %}
+          <tr><td>Stops along the way</td><td>
+            {% for stop in booking.stops_json %}
+              {{ forloop.counter }}. {{ stop.description|default:"Stop" }} &mdash; up to {{ stop.minutes }} min
+              ({% if stop.fee %}${{ stop.fee|floatformat:2 }}{% else %}Free{% endif %}){% if not forloop.last %}<br>{% endif %}
+            {% endfor %}
+          </td></tr>
+          {% endif %}
+          {% if booking.price_breakdown.night_surcharge %}
+          <tr><td>Night pickup surcharge</td><td>${{ booking.price_breakdown.night_surcharge|floatformat:2 }}</td></tr>
+          {% endif %}
+          <tr><td>Payment method</td><td>{{ booking.get_payment_option_display }}</td></tr>
           {% if booking.ride_type == 'chauffeur' %}
           <tr><td>Package</td><td>{{ booking.chauffeur_package_label }}</td></tr>
           {% if booking.approximate_end_time %}<tr><td>Approx end time</td><td>{{ booking.approximate_end_time }}</td></tr>{% endif %}

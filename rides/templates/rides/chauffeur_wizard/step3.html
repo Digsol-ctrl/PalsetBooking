@@ -27,6 +27,7 @@
     <input type="hidden" id="num_adults" name="num_adults" value="{{ step3_data.num_adults|default:'1' }}">
     <input type="hidden" id="num_kids_carried" name="num_kids_carried" value="{{ step3_data.num_kids_carried|default:'0' }}">
     <input type="hidden" id="luggage_count" name="luggage_count" value="{{ step3_data.luggage_count|default:'0' }}">
+    <input type="hidden" id="hand_luggage_count" name="hand_luggage_count" value="{{ step3_data.hand_luggage_count|default:'0' }}">
     <input type="hidden" id="baby_car_seater" name="baby_car_seater" value="{{ step3_data.baby_car_seater|default:'0' }}">
 
     <!-- Main Passenger Name -->
@@ -93,6 +94,16 @@
             </div>
             <small class="form-text">First 5 bags free, then charged per extra bag.</small>
         </div>
+
+        <div class="form-group">
+            <label class="form-label"><i class="bi bi-handbag"></i> Hand Luggage</label>
+            <div class="field-counter">
+                <button type="button" class="btn-decrement" data-field="hand_luggage_count">&#8722;</button>
+                <input type="text" id="display_hand_luggage_count" title="Number of hand luggage items" readonly value="{{ step3_data.hand_luggage_count|default:'0' }}">
+                <button type="button" class="btn-increment" data-field="hand_luggage_count">+</button>
+            </div>
+            <small class="form-text">Small bags kept with you in the cabin</small>
+        </div>
     </div>
 
     <div class="btn-group-wizard">
@@ -104,11 +115,15 @@
 <script>
 const maxPassengers = {% if selected_package %}{{ selected_package.max_passengers }}{% else %}99{% endif %};
 
+// A configured limit of 0 (the default) means "no maximum".
+const noLimit = Number.MAX_SAFE_INTEGER;
+
 const fields = {
-    num_adults:       { min: 1, max: 20, initial: {{ step3_data.num_adults|default:1 }} },
-    baby_car_seater:  { min: 0, max: 5,  initial: {{ step3_data.baby_car_seater|default:0 }} },
-    num_kids_carried: { min: 0, max: 10, initial: {{ step3_data.num_kids_carried|default:0 }} },
-    luggage_count:    { min: 0, max: 20, initial: {{ step3_data.luggage_count|default:0 }} },
+    num_adults:        { min: 1, max: {{ booking_limits.MAX_PASSENGERS|default:0 }} || noLimit, initial: {{ step3_data.num_adults|default:1 }} },
+    baby_car_seater:   { min: 0, max: noLimit, initial: {{ step3_data.baby_car_seater|default:0 }} },
+    num_kids_carried:  { min: 0, max: noLimit, initial: {{ step3_data.num_kids_carried|default:0 }} },
+    luggage_count:     { min: 0, max: {{ booking_limits.MAX_LUGGAGE|default:0 }} || noLimit, initial: {{ step3_data.luggage_count|default:0 }} },
+    hand_luggage_count:{ min: 0, max: {{ booking_limits.MAX_HAND_LUGGAGE|default:0 }} || noLimit, initial: {{ step3_data.hand_luggage_count|default:0 }} },
 };
 
 function checkOverLimit() {

@@ -4,7 +4,7 @@ from .views import (
     CreateBookingView, PaynowResultView, PaynowReturnView, PaynowPollView,
     BookingFormView, BookingSuccessView, PriceEstimateView,
     MultiStepBookingWizardView, PlacesAutocompleteView, DistanceFareCalcView,
-    ChauffeurBookingWizardView, ServiceSelectorView,
+    ChauffeurBookingWizardView, ServiceSelectorView, ManageBookingView,
 )
 
 app_name = 'rides'
@@ -22,6 +22,9 @@ urlpatterns = [
     path('chauffeur/', ChauffeurBookingWizardView.as_view(), {'step': 1}, name='chauffeur_wizard_start'),
 
     path('bookings/success/<str:pk>/', BookingSuccessView.as_view(), name='booking_success'),
+
+    # Customer self-service via emailed magic link (no account needed)
+    path('booking/manage/<str:token>/', ManageBookingView.as_view(), name='manage_booking'),
 
     # AJAX endpoints for wizard
     path('api/places-autocomplete/', PlacesAutocompleteView.as_view(), name='places_autocomplete'),

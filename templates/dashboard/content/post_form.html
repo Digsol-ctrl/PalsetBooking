@@ -1,0 +1,81 @@
+{% extends "dashboard/base.html" %}
+{% block title %}{% if is_new %}New post{% else %}Edit post{% endif %} — Easy Transit Dashboard{% endblock %}
+{% block page_title %}{% if is_new %}New Post{% else %}Edit Post{% endif %}{% endblock %}
+
+{% block content %}
+<div style="max-width:720px">
+
+  <a href="{% url 'dashboard_content:posts' %}" style="display:inline-block;margin-bottom:16px;font-size:13px;color:#6b7280;text-decoration:none">
+    <i class="bi bi-arrow-left"></i> Back to all posts
+  </a>
+
+  <div class="dash-card">
+    <div class="dash-card-header">
+      <i class="bi bi-pencil-square me-2" style="color:#10b981"></i>{% if is_new %}Write a new post{% else %}{{ post.title }}{% endif %}
+    </div>
+    <div class="dash-card-body">
+
+      {% if form.errors %}
+      <div style="background:#fee2e2;border:1px solid #fecaca;border-radius:8px;padding:12px 14px;font-size:13px;color:#991b1b;margin-bottom:18px">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>Please fix the following:
+        <ul style="margin:7px 0 0 18px;padding:0">
+          {% for field, errors in form.errors.items %}
+            {% for error in errors %}<li>{{ field }}: {{ error }}</li>{% endfor %}
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+
+      <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+
+        <div class="mb-3">
+          <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">Title</label>
+          {{ form.title }}
+        </div>
+
+        <div class="mb-3">
+          <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">Teaser <span style="font-weight:400;color:#9ca3af">(optional)</span></label>
+          {{ form.summary }}
+          <div style="font-size:11px;color:#9ca3af;margin-top:4px">Shown on the listing page. Left blank, we use the opening of the post.</div>
+        </div>
+
+        <div class="mb-3">
+          <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">Post</label>
+          {{ form.body }}
+          <div style="font-size:11px;color:#9ca3af;margin-top:4px">Plain text. Leave a blank line between paragraphs.</div>
+        </div>
+
+        <div class="mb-3">
+          <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">Cover image <span style="font-weight:400;color:#9ca3af">(optional)</span></label>
+          {% if post.cover_image %}
+          <div style="margin-bottom:9px">
+            <img src="{{ post.cover_image.url }}" alt="" style="max-width:230px;border-radius:8px;display:block;box-shadow:0 2px 10px rgba(0,0,0,.12)">
+          </div>
+          {% endif %}
+          {{ form.cover_image }}
+          <div style="font-size:11px;color:#9ca3af;margin-top:4px">JPG, PNG, WEBP or GIF, up to 8MB.</div>
+        </div>
+
+        <div class="row g-3 mb-3">
+          <div class="col-sm-6">
+            <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">Publish date</label>
+            {{ form.published_at }}
+            <div style="font-size:11px;color:#9ca3af;margin-top:4px">A future date keeps the post hidden until then.</div>
+          </div>
+          <div class="col-sm-6" style="display:flex;align-items:center">
+            <label style="font-size:13px;font-weight:600;color:#374151;display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:18px">
+              {{ form.is_published }} Published
+            </label>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:20px">
+          <button type="submit" class="btn-green"><i class="bi bi-floppy-fill me-2"></i>Save post</button>
+          <a href="{% url 'dashboard_content:posts' %}" style="padding:9px 20px;border-radius:7px;background:#f3f4f6;color:#374151;font-size:14px;font-weight:600;text-decoration:none">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

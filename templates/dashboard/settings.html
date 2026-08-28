@@ -180,6 +180,235 @@
     </div>
   </div>
 
+  <!-- Customer Self-Service -->
+  <div class="dash-card mb-3">
+    <div class="dash-card-header">
+      <i class="bi bi-person-gear me-2" style="color:#0ea5e9"></i>Customer Self-Service
+    </div>
+    <div class="dash-card-body">
+      <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:12px 14px;font-size:12px;color:#075985;margin-bottom:18px">
+        <i class="bi bi-info-circle me-2"></i>
+        Every confirmation email carries a private &ldquo;Manage my booking&rdquo; link. Customers need no account &mdash;
+        the link itself is their access, so it should not be shared. You are emailed whenever a customer
+        changes or cancels, and the change is recorded on the booking.
+      </div>
+
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="form_type" value="self_service">
+
+        <div class="mb-3">
+          <label style="font-size:13px;font-weight:600;color:#374151;display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" name="allow_customer_reschedule" value="1"
+                   {% if site_settings.allow_customer_reschedule %}checked{% endif %}
+                   style="width:16px;height:16px;cursor:pointer">
+            Let customers change their pickup date and time
+          </label>
+        </div>
+        <div class="mb-3">
+          <label style="font-size:13px;font-weight:600;color:#374151;display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" name="allow_customer_cancellation" value="1"
+                   {% if site_settings.allow_customer_cancellation %}checked{% endif %}
+                   style="width:16px;height:16px;cursor:pointer">
+            Let customers cancel their booking
+          </label>
+        </div>
+
+        <div class="row g-3 mb-3">
+          <div class="col-sm-6">
+            <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">Cut-off before pickup (hours)</label>
+            <input type="number" name="booking_change_cutoff_hours" value="{{ site_settings.booking_change_cutoff_hours }}" min="0" class="form-ctrl">
+            <div style="font-size:11px;color:#9ca3af;margin-top:4px">
+              Changes and cancellations close this many hours before pickup, and the customer is told to call you instead.
+              <strong>0</strong> allows changes right up to the pickup time.
+            </div>
+          </div>
+        </div>
+
+        <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:12px 14px;font-size:12px;color:#92400e;margin-bottom:18px">
+          <i class="bi bi-exclamation-triangle me-2"></i>
+          Moving a trip into the night window re-prices it automatically, and the customer sees the new fare before and after the change.
+        </div>
+
+        <button type="submit" class="btn-green"><i class="bi bi-floppy-fill me-2"></i>Save Self-Service Settings</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Night Pickup Surcharge -->
+  <div class="dash-card mb-3">
+    <div class="dash-card-header">
+      <i class="bi bi-moon-stars-fill me-2" style="color:#6366f1"></i>Night Pickup Surcharge
+    </div>
+    <div class="dash-card-body">
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="form_type" value="night">
+
+        <div style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;padding:12px 14px;font-size:12px;color:#3730a3;margin-bottom:18px">
+          <i class="bi bi-info-circle me-2"></i>
+          A flat amount added to any city or long distance ride whose pickup time falls inside the night window.
+          The window may cross midnight (e.g. 22:00 to 04:00). Chauffeur Drive packages are not affected.
+        </div>
+
+        <div class="mb-3">
+          <label style="font-size:13px;font-weight:600;color:#374151;display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" name="night_surcharge_enabled" value="1"
+                   {% if site_settings.night_surcharge_enabled %}checked{% endif %}
+                   style="width:16px;height:16px;cursor:pointer">
+            Charge a night pickup surcharge
+          </label>
+        </div>
+
+        <div class="row g-3 mb-3">
+          <div class="col-sm-4">
+            <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">Surcharge amount ($)</label>
+            <input type="number" name="night_surcharge_amount" value="{{ site_settings.night_surcharge_amount }}" step="0.01" min="0" class="form-ctrl">
+          </div>
+          <div class="col-sm-4">
+            <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">Night starts</label>
+            <input type="time" name="night_start" value="{{ site_settings.night_start|time:'H:i' }}" class="form-ctrl">
+          </div>
+          <div class="col-sm-4">
+            <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">Night ends</label>
+            <input type="time" name="night_end" value="{{ site_settings.night_end|time:'H:i' }}" class="form-ctrl">
+          </div>
+        </div>
+
+        <div style="background:#f0fdf4;border:1px solid #6ee7b7;border-radius:8px;padding:12px 14px;font-size:12px;color:#065f46;margin-bottom:18px">
+          <strong>Currently:</strong>
+          {% if site_settings.night_surcharge_enabled %}
+            ${{ site_settings.night_surcharge_amount }} added to pickups between
+            {{ site_settings.night_start|time:"H:i" }} and {{ site_settings.night_end|time:"H:i" }}
+          {% else %}
+            No night surcharge is being charged
+          {% endif %}
+        </div>
+
+        <button type="submit" class="btn-green"><i class="bi bi-floppy-fill me-2"></i>Save Night Surcharge</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Stops Along The Way -->
+  <div class="dash-card mb-3">
+    <div class="dash-card-header">
+      <i class="bi bi-signpost-split-fill me-2" style="color:#0ea5e9"></i>Stops Along The Way
+    </div>
+    <div class="dash-card-body">
+      <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:12px 14px;font-size:12px;color:#075985;margin-bottom:18px">
+        <i class="bi bi-info-circle me-2"></i>
+        Charged <strong>per stop</strong> &mdash; two 15 minute stops cost twice as much as one.
+        The first band that covers the stop is the one charged, so list them shortest first.
+        A stop longer than every band falls back to the longest band's price.
+      </div>
+
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="form_type" value="stops">
+
+        <div style="overflow-x:auto;margin-bottom:16px">
+          <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <thead>
+              <tr style="background:#f9fafb">
+                <th style="padding:8px 10px;text-align:left;font-size:11px;color:#6b7280;font-weight:700;text-transform:uppercase;border-bottom:1px solid #e5e7eb">Up to (minutes)</th>
+                <th style="padding:8px 10px;text-align:left;font-size:11px;color:#6b7280;font-weight:700;text-transform:uppercase;border-bottom:1px solid #e5e7eb">Price ($)</th>
+                <th style="padding:8px 10px;border-bottom:1px solid #e5e7eb"></th>
+              </tr>
+            </thead>
+            <tbody id="stopTierBody">
+              {% for tier in stop_tiers %}
+              <tr class="stop-tier-row">
+                <td style="padding:6px 10px"><input type="number" name="stop_max_minutes" value="{{ tier.max_minutes }}" min="1" class="form-ctrl" style="width:120px"></td>
+                <td style="padding:6px 10px"><input type="number" name="stop_price" value="{{ tier.price }}" step="0.01" min="0" class="form-ctrl" style="width:110px"></td>
+                <td style="padding:6px 10px"><button type="button" onclick="this.closest('tr').remove()" style="background:#fee2e2;color:#991b1b;border:none;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer">&#10005;</button></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          <button type="button" id="addStopTier" style="margin-top:8px;background:#f0fdf4;color:#065f46;border:1px dashed #6ee7b7;border-radius:6px;padding:5px 14px;font-size:12px;cursor:pointer">+ Add band</button>
+        </div>
+
+        <button type="submit" class="btn-green"><i class="bi bi-floppy-fill me-2"></i>Save Stop Charges</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Booking Limits, Hand Luggage & Payment Rules -->
+  <div class="dash-card mb-3">
+    <div class="dash-card-header">
+      <i class="bi bi-sliders me-2" style="color:#2563eb"></i>Booking Limits &amp; Payment Rules
+    </div>
+    <div class="dash-card-body">
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="form_type" value="booking_rules">
+
+        <div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:10px">Maximum a customer can select</div>
+        <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 14px;font-size:12px;color:#1e40af;margin-bottom:14px">
+          <i class="bi bi-info-circle me-2"></i>
+          Leave a limit at <strong>0</strong> for no maximum &mdash; customers can then book any number.
+        </div>
+        <div class="row g-3 mb-4">
+          <div class="col-sm-4">
+            <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">Max passengers</label>
+            <input type="number" name="max_passengers" value="{{ site_settings.max_passengers }}" min="0" class="form-ctrl">
+          </div>
+          <div class="col-sm-4">
+            <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">Max luggage bags</label>
+            <input type="number" name="max_luggage" value="{{ site_settings.max_luggage }}" min="0" class="form-ctrl">
+          </div>
+          <div class="col-sm-4">
+            <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">Max hand luggage</label>
+            <input type="number" name="max_hand_luggage" value="{{ site_settings.max_hand_luggage }}" min="0" class="form-ctrl">
+          </div>
+        </div>
+
+        <div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:10px">Hand luggage charging</div>
+        <div class="row g-3 mb-4">
+          <div class="col-sm-6">
+            <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">Free hand luggage items</label>
+            <input type="number" name="hand_luggage_free" value="{{ site_settings.hand_luggage_free }}" min="0" class="form-ctrl">
+            <div style="font-size:11px;color:#9ca3af;margin-top:4px">First N hand luggage items are included at no charge.</div>
+          </div>
+          <div class="col-sm-6">
+            <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">Fee per extra item ($)</label>
+            <input type="number" name="hand_luggage_fee" value="{{ site_settings.hand_luggage_fee }}" step="0.01" min="0" class="form-ctrl">
+            <div style="font-size:11px;color:#9ca3af;margin-top:4px">Set to <strong>0</strong> to make hand luggage always free.</div>
+          </div>
+        </div>
+
+        <div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:10px">Return trips</div>
+        <div class="row g-3 mb-4">
+          <div class="col-sm-6">
+            <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">Return leg discount (%)</label>
+            <input type="number" name="return_trip_discount_percent" value="{{ site_settings.return_trip_discount_percent }}" step="0.01" min="0" max="100" class="form-ctrl">
+            <div style="font-size:11px;color:#9ca3af;margin-top:4px">
+              Taken off the return leg on a round trip. <strong>0</strong> means the trip back costs the same as the trip there.
+              Stops are only charged once; each leg is checked against the night window separately.
+            </div>
+          </div>
+        </div>
+
+        <div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:10px">Paynow minimum amount</div>
+        <div class="row g-3 mb-3">
+          <div class="col-sm-6">
+            <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">Minimum fare for Paynow ($)</label>
+            <input type="number" name="paynow_min_amount" value="{{ site_settings.paynow_min_amount }}" step="0.01" min="0" class="form-ctrl">
+            <div style="font-size:11px;color:#9ca3af;margin-top:4px">Paynow is hidden below this amount because its fees are high on small payments. Set to <strong>0</strong> to always offer Paynow.</div>
+          </div>
+        </div>
+        <div class="mb-3">
+          <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">Note shown to customers below the minimum</label>
+          <textarea name="paynow_min_note" rows="3" class="form-ctrl">{{ site_settings.paynow_min_note }}</textarea>
+          <div style="font-size:11px;color:#9ca3af;margin-top:4px">Tell customers where to pay instead &mdash; e.g. Paylink, Western Union, Mukuru, WorldRemit.</div>
+        </div>
+
+        <button type="submit" class="btn-green"><i class="bi bi-floppy-fill me-2"></i>Save Booking Rules</button>
+      </form>
+    </div>
+  </div>
+
   <!-- Chauffeur Drive Packages -->
   <div class="dash-card mb-3">
     <div class="dash-card-header">
@@ -276,6 +505,22 @@
 
 {% block extra_js %}
 <script>
+  // Stop charge bands: add a blank row
+  (function () {
+    const addStopTier = document.getElementById('addStopTier');
+    if (!addStopTier) return;
+    addStopTier.addEventListener('click', function () {
+      const body = document.getElementById('stopTierBody');
+      const row = document.createElement('tr');
+      row.className = 'stop-tier-row';
+      row.innerHTML =
+        '<td style="padding:6px 10px"><input type="number" name="stop_max_minutes" value="" min="1" class="form-ctrl" style="width:120px"></td>' +
+        '<td style="padding:6px 10px"><input type="number" name="stop_price" value="" step="0.01" min="0" class="form-ctrl" style="width:110px"></td>' +
+        '<td style="padding:6px 10px"><button type="button" onclick="this.closest(\'tr\').remove()" style="background:#fee2e2;color:#991b1b;border:none;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer">&#10005;</button></td>';
+      body.appendChild(row);
+    });
+  })();
+
   function updateAboveKmLabel() {
     const maxInputs = document.querySelectorAll('#bracketBody input[name="bracket_max"]');
     let highest = 0;

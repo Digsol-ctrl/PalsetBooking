@@ -1,12 +1,41 @@
+import json
+from datetime import datetime
+
 from django import forms
+from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.utils import timezone
+
 from .models import RideBooking
 from .services.distance import DistanceService
 
 
-# ============================================================================
-# Step-Based Forms for the Multi-Step Booking Wizard
-# ============================================================================
+def _reject_past_pickup(pickup_date, pickup_time, label='pickup'):
+    """Raise if the given date/time has already passed.
+
+    Bookings must always be for a future moment; a lapsed date or time is rejected
+    server-side so it cannot be bypassed by editing the page.
+    """
+    if not pickup_date or not pickup_time:
+        return
+
+    naive = datetime.combine(pickup_date, pickup_time)
+    if settings.USE_TZ:
+        try:
+            scheduled = timezone.make_aware(naive, timezone.get_current_timezone())
+        except Exception:
+            # Ambiguous or non-existent local time (DST edge) — compare naively instead
+            scheduled, now = naive, datetime.now()
+        else:
+            now = timezone.localtime()
+    else:
+        scheduled, now = naive, datetime.now()
+
+    if scheduled < now:
+        raise ValidationError(
+            f'The {label} date and time have already passed. Please choose a future date and time.'
+        )
+
 
 class Step1PickupDropoffForm(forms.Form):
     """Step 1: Pickup & Dropoff Locations with auto-geolocation."""
@@ -70,6 +99,20 @@ class Step1PickupDropoffForm(forms.Form):
     arrival_date = forms.DateField(required=False, widget=forms.DateInput(attrs={'class': 'form-control', 'type': 'date', 'id': 'id_arrival_date'}))
     arrival_time = forms.TimeField(required=False, widget=forms.TimeInput(attrs={'class': 'form-control', 'type': 'time', 'id': 'id_arrival_time'}))
 
+    # Return trip (one booking covering the journey back)
+    is_return_trip = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={'id': 'is_return_trip', 'class': 'form-check-input'})
+    )
+    return_date = forms.DateField(
+        required=False,
+        widget=forms.DateInput(attrs={'class': 'form-control', 'type': 'date', 'id': 'return_date'})
+    )
+    return_time = forms.TimeField(
+        required=False,
+        widget=forms.TimeInput(attrs={'class': 'form-control', 'type': 'time', 'id': 'return_time'})
+    )
+
     distance_km = forms.FloatField(
         required=False,
         widget=forms.HiddenInput(attrs={'id': 'distance_km'}),
@@ -96,11 +139,33 @@ class Step1PickupDropoffForm(forms.Form):
 
             cleaned['pickup_date'] = cleaned.get('arrival_date')
             cleaned['pickup_time'] = cleaned.get('arrival_time')
+            _reject_past_pickup(cleaned.get('arrival_date'), cleaned.get('arrival_time'), label='flight arrival')
         else:
             # Non-airport pickups must provide pickup date/time directly.
             if not cleaned.get('pickup_date') or not cleaned.get('pickup_time'):
                 raise ValidationError('Please provide pickup date and pickup time.')
-        
+            _reject_past_pickup(cleaned.get('pickup_date'), cleaned.get('pickup_time'))
+
+        # A return trip needs its own date and time, after the outbound pickup.
+        if cleaned.get('is_return_trip'):
+            return_date = cleaned.get('return_date')
+            return_time = cleaned.get('return_time')
+            if not return_date or not return_time:
+                raise ValidationError('Please provide the return date and return time for your round trip.')
+
+            _reject_past_pickup(return_date, return_time, label='return')
+
+            outbound_date = cleaned.get('pickup_date')
+            outbound_time = cleaned.get('pickup_time')
+            if outbound_date and outbound_time:
+                outbound = datetime.combine(outbound_date, outbound_time)
+                back = datetime.combine(return_date, return_time)
+                if back <= outbound:
+                    raise ValidationError('The return trip must be after the pickup date and time.')
+        else:
+            cleaned['return_date'] = None
+            cleaned['return_time'] = None
+
         return cleaned
 
 
@@ -127,6 +192,17 @@ class Step2PassengersLuggageForm(forms.Form):
         initial=0,
         widget=forms.HiddenInput()
     )
+    hand_luggage_count = forms.IntegerField(
+        min_value=0,
+        initial=0,
+        required=False,
+        widget=forms.HiddenInput()
+    )
+    # JSON list of {"description": str, "minutes": int}, built by the stops widget
+    stops_json = forms.CharField(
+        required=False,
+        widget=forms.HiddenInput()
+    )
     salutation = forms.CharField(
         max_length=32,
         required=False,
@@ -140,10 +216,59 @@ class Step2PassengersLuggageForm(forms.Form):
         widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Full name (e.g. John Doe)'})
     )
 
+    @staticmethod
+    def _clean_stops(raw):
+        """Parse the stops widget payload into [{"description", "minutes"}].
+
+        Anything malformed is dropped rather than failing the whole step; the
+        durations are re-priced server-side from the configured tiers regardless
+        of what the browser sent.
+        """
+        if not raw:
+            return []
+        try:
+            data = json.loads(raw)
+        except (TypeError, ValueError):
+            return []
+        if not isinstance(data, list):
+            return []
+
+        stops = []
+        for entry in data[:20]:  # generous ceiling, guards against a runaway payload
+            if not isinstance(entry, dict):
+                continue
+            try:
+                minutes = int(entry.get('minutes') or 0)
+            except (TypeError, ValueError):
+                continue
+            if minutes <= 0:
+                continue
+            stops.append({
+                'description': str(entry.get('description') or '').strip()[:200],
+                'minutes': minutes,
+            })
+        return stops
+
     def clean(self):
         cleaned = super().clean()
         if cleaned.get('num_adults', 0) < 1:
             raise ValidationError('At least one adult is required.')
+
+        cleaned['hand_luggage_count'] = cleaned.get('hand_luggage_count') or 0
+        cleaned['stops'] = self._clean_stops(cleaned.get('stops_json'))
+
+        # Enforce the maximums configured in the dashboard. A limit of 0 means no limit.
+        from .services.pricing import PricingService
+        limits = PricingService.get_booking_limits()
+        checks = (
+            ('num_adults', limits.get('MAX_PASSENGERS', 0), 'passengers'),
+            ('luggage_count', limits.get('MAX_LUGGAGE', 0), 'luggage bags'),
+            ('hand_luggage_count', limits.get('MAX_HAND_LUGGAGE', 0), 'hand luggage items'),
+        )
+        for field, limit, noun in checks:
+            if limit and (cleaned.get(field) or 0) > limit:
+                raise ValidationError(f'A maximum of {limit} {noun} can be booked online. Please contact us for larger groups.')
+
         return cleaned
 
 
@@ -332,6 +457,7 @@ class ChauffeurStep2Form(forms.Form):
             raise ValidationError('Please provide the pickup date.')
         if not cleaned.get('pickup_time'):
             raise ValidationError('Please provide the start time.')
+        _reject_past_pickup(cleaned.get('pickup_date'), cleaned.get('pickup_time'))
         return cleaned
 
 
@@ -423,5 +549,54 @@ class BookingForm(forms.Form):
 
         if cleaned.get('num_adults') < 1:
             raise ValidationError('At least one adult is required')
+
+        return cleaned
+
+
+class RescheduleBookingForm(forms.Form):
+    """Customer-facing form for moving a booking to a new date and time.
+
+    The return leg is only asked for when the booking actually has one.
+    """
+
+    pickup_date = forms.DateField(
+        widget=forms.DateInput(attrs={'class': 'form-control', 'type': 'date', 'id': 'new_pickup_date'})
+    )
+    pickup_time = forms.TimeField(
+        widget=forms.TimeInput(attrs={'class': 'form-control', 'type': 'time', 'id': 'new_pickup_time'})
+    )
+    return_date = forms.DateField(
+        required=False,
+        widget=forms.DateInput(attrs={'class': 'form-control', 'type': 'date', 'id': 'new_return_date'})
+    )
+    return_time = forms.TimeField(
+        required=False,
+        widget=forms.TimeInput(attrs={'class': 'form-control', 'type': 'time', 'id': 'new_return_time'})
+    )
+
+    def __init__(self, *args, booking=None, **kwargs):
+        self.booking = booking
+        super().__init__(*args, **kwargs)
+
+    def clean(self):
+        cleaned = super().clean()
+        pickup_date = cleaned.get('pickup_date')
+        pickup_time = cleaned.get('pickup_time')
+
+        if not pickup_date or not pickup_time:
+            raise ValidationError('Please provide both a new pickup date and a new pickup time.')
+
+        _reject_past_pickup(pickup_date, pickup_time)
+
+        if self.booking is not None and self.booking.is_return_trip:
+            return_date = cleaned.get('return_date')
+            return_time = cleaned.get('return_time')
+            if not return_date or not return_time:
+                raise ValidationError('This is a return trip, so please provide the return date and time too.')
+
+            _reject_past_pickup(return_date, return_time, label='return')
+
+            if datetime.combine(return_date, return_time) <= datetime.combine(pickup_date, pickup_time):
+                raise ValidationError('The return trip must be after the pickup date and time.')
 
         return cleaned

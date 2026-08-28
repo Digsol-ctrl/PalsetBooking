@@ -1,0 +1,76 @@
+{% extends "content/base_public.html" %}
+
+{% block title %}News &amp; Trips - Easy Transit{% endblock %}
+{% block meta_description %}Recent trips, news and updates from the Easy Transit team.{% endblock %}
+
+{% block extra_css %}
+        .post-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 22px; }
+        .post-card {
+            background: #fff; border-radius: 14px; overflow: hidden;
+            box-shadow: 0 3px 16px rgba(15,42,71,.09);
+            display: flex; flex-direction: column;
+            text-decoration: none; color: inherit;
+            transition: transform .2s ease, box-shadow .2s ease;
+        }
+        .post-card:hover { transform: translateY(-3px); box-shadow: 0 8px 26px rgba(15,42,71,.16); }
+        .post-cover { width: 100%; height: 180px; object-fit: cover; display: block; background: #e2e8f0; }
+        .post-cover-fallback {
+            height: 180px; display: flex; align-items: center; justify-content: center;
+            background: linear-gradient(135deg, #1e3a5f 0%, #10b981 100%); color: rgba(255,255,255,.65); font-size: 34px;
+        }
+        .post-body { padding: 17px 19px 21px; flex: 1; display: flex; flex-direction: column; }
+        .post-date { font-size: 12px; color: #10b981; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; }
+        .post-card h2 { font-size: 18px; font-weight: 700; color: #0f2a47; margin: 6px 0 8px; }
+        .post-teaser { font-size: 14px; color: #64748b; flex: 1; }
+        .post-more { margin-top: 13px; font-size: 13px; font-weight: 700; color: #059652; }
+
+        .pager { display: flex; justify-content: center; gap: 8px; margin-top: 34px; }
+        .pager a, .pager span {
+            padding: 8px 15px; border-radius: 8px; font-size: 14px; font-weight: 600;
+            text-decoration: none; background: #fff; color: #1e3a5f; border: 1px solid #dbe6f0;
+        }
+        .pager .current { background: #1e3a5f; color: #fff; border-color: #1e3a5f; }
+{% endblock %}
+
+{% block content %}
+<h1 class="page-title">News &amp; Recent Trips</h1>
+<p class="page-sub">What we&rsquo;ve been up to, where we&rsquo;ve been, and anything worth knowing before your next ride.</p>
+
+{% if posts %}
+    <div class="post-grid">
+        {% for post in posts %}
+        <a class="post-card" href="{{ post.get_absolute_url }}">
+            {% if post.cover_image %}
+                <img class="post-cover" src="{{ post.cover_image.url }}" alt="{{ post.title }}" loading="lazy">
+            {% else %}
+                <div class="post-cover-fallback"><i class="bi bi-signpost-2"></i></div>
+            {% endif %}
+            <div class="post-body">
+                <span class="post-date">{{ post.published_at|date:"j F Y" }}</span>
+                <h2>{{ post.title }}</h2>
+                <p class="post-teaser">{{ post.teaser }}</p>
+                <span class="post-more">Read more <i class="bi bi-arrow-right"></i></span>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+
+    {% if page_obj.has_other_pages %}
+    <div class="pager">
+        {% if page_obj.has_previous %}
+            <a href="?page={{ page_obj.previous_page_number }}"><i class="bi bi-arrow-left"></i> Newer</a>
+        {% endif %}
+        <span class="current">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+        {% if page_obj.has_next %}
+            <a href="?page={{ page_obj.next_page_number }}">Older <i class="bi bi-arrow-right"></i></a>
+        {% endif %}
+    </div>
+    {% endif %}
+{% else %}
+    <div class="empty">
+        <i class="bi bi-newspaper"></i>
+        <strong>No posts yet</strong>
+        <p style="margin-top:6px">Check back soon &mdash; we&rsquo;ll be sharing trip reports and news here.</p>
+    </div>
+{% endif %}
+{% endblock %}

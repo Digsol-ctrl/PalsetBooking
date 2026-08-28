@@ -26,7 +26,7 @@ def test_price_estimate_by_coords(monkeypatch):
         def get_distance_km(a, b):
             return 10.5
 
-    monkeypatch.setattr('rides.services.distance.DistanceService', Dummy)
+    monkeypatch.setattr('rides.views.DistanceService', Dummy)
 
     payload = {
         "pickup_lat": -17.8,

@@ -28,6 +28,7 @@ from django.views.generic import View, TemplateView
 from django.http import JsonResponse
 from django.middleware.csrf import get_token
 from django.conf import settings
+from django.utils import timezone
 from django.db import transaction
 from django.urls import reverse
 from django.core.exceptions import ValidationError
@@ -46,6 +47,7 @@ from .forms import (
     ChauffeurStep1Form,
     ChauffeurStep2Form,
     ChauffeurStep4ContactForm,
+    RescheduleBookingForm,
 )
 from .serializers import (
     CreateBookingSerializer,
@@ -68,13 +70,18 @@ def _logo_url():
     return None
 
 
-def _calculate_fare(distance_km, num_adults, num_kids_seated=0, baby_car_seater=0, num_kids_carried=0, luggage_count=0):
+def _calculate_fare(distance_km, num_adults, num_kids_seated=0, baby_car_seater=0, num_kids_carried=0, luggage_count=0, hand_luggage_count=0, pickup_time=None, stops=None, is_return_trip=False, return_time=None):
     """Pick city vs long-distance pricing automatically based on distance threshold."""
     if PricingService.is_long_distance(distance_km):
         return PricingService.calculate_long_distance(
             distance_km=distance_km,
             num_adults=num_adults,
             luggage_count=luggage_count,
+            hand_luggage_count=hand_luggage_count,
+            pickup_time=pickup_time,
+            stops=stops,
+            is_return_trip=is_return_trip,
+            return_time=return_time,
         )
     return PricingService.calculate(
         distance_km=distance_km,
@@ -83,6 +90,11 @@ def _calculate_fare(distance_km, num_adults, num_kids_seated=0, baby_car_seater=
         baby_car_seater=baby_car_seater,
         num_kids_carried=num_kids_carried,
         luggage_count=luggage_count,
+        hand_luggage_count=hand_luggage_count,
+        pickup_time=pickup_time,
+        stops=stops,
+        is_return_trip=is_return_trip,
+        return_time=return_time,
     )
 
 logger = logging.getLogger(__name__)
@@ -211,6 +223,45 @@ def build_booking_message(booking, eta_minutes=None, payment_label_override: Opt
         if booking.luggage_count:
             parts.append(f"*Luggage:* {booking.luggage_count} bag(s)")
 
+        if getattr(booking, 'hand_luggage_count', 0):
+            parts.append(f"*Hand luggage:* {booking.hand_luggage_count} item(s)")
+
+        stops = getattr(booking, 'stops_json', None) or []
+        if stops:
+            parts.append("")
+            parts.append("*Stops along the way:*")
+            for idx, stop in enumerate(stops, start=1):
+                desc = (stop.get('description') or 'Stop').strip()
+                mins = stop.get('minutes')
+                fee = stop.get('fee') or 0
+                fee_text = f"${fee:.2f}" if fee else "Free"
+                parts.append(f"  {idx}. {desc} - up to {mins} min ({fee_text})")
+
+        breakdown = getattr(booking, 'price_breakdown', None) or {}
+        if breakdown.get('night_surcharge'):
+            parts.append(f"*Night pickup surcharge:* ${breakdown['night_surcharge']:.2f}")
+
+        if getattr(booking, 'is_return_trip', False):
+            parts.append("")
+            return_line = "*Return trip:* Yes"
+            rd = getattr(booking, 'return_date', None)
+            rt = getattr(booking, 'return_time', None)
+            if rd:
+                try:
+                    return_line += f" - {rd.isoformat()}"
+                except Exception:
+                    return_line += f" - {rd}"
+            if rt:
+                try:
+                    return_line += f" at {rt.strftime('%H:%M')}"
+                except Exception:
+                    return_line += f" at {rt}"
+            parts.append(return_line)
+            if breakdown.get('return_leg_fee'):
+                parts.append(f"*Return leg fare:* ${breakdown['return_leg_fee']:.2f}")
+            if breakdown.get('return_night_surcharge'):
+                parts.append(f"*Night return surcharge:* ${breakdown['return_night_surcharge']:.2f}")
+
         if getattr(booking, 'passengers_over_limit', False):
             parts.append("⚠️ *Passengers exceed standard package limit — follow up required*")
 
@@ -329,6 +380,10 @@ class MultiStepBookingWizardView(View):
             'csrf_token': get_token(request),
             'logo_url': _logo_url(),
             'ld_threshold_km': PricingService._get_ld_threshold(),
+            'booking_limits': PricingService.get_booking_limits(),
+            'stop_tiers': PricingService.get_stop_tiers(),
+            'night_cfg': PricingService.get_night_cfg(),
+            'return_discount_percent': PricingService.get_return_discount_percent(),
         }
 
         # Restore previous step data from session if user navigates back
@@ -371,6 +426,7 @@ class MultiStepBookingWizardView(View):
             distance_km = float(step1.get('distance_km') or 0)
             context['form'] = form
             context['step1_data'] = step1
+            context['step2_data'] = wizard_data.get('step2', {})
             context['is_long_distance'] = PricingService.is_long_distance(distance_km) if distance_km > 0 else False
             context['ld_threshold_km'] = PricingService._get_ld_threshold()
             return render(request, 'rides/booking_wizard/step2.html', context)
@@ -437,10 +493,17 @@ class MultiStepBookingWizardView(View):
                     baby_car_seater=step2.get('baby_car_seater', 0),
                     num_kids_carried=step2.get('num_kids_carried', 0),
                     luggage_count=step2.get('luggage_count', 0),
+                    hand_luggage_count=step2.get('hand_luggage_count', 0),
+                    pickup_time=step1.get('pickup_time'),
+                    stops=step2.get('stops', []),
+                    is_return_trip=step1.get('is_return_trip', False),
+                    return_time=step1.get('return_time'),
                 )
                 context['fare_breakdown'] = fare_breakdown
                 context['estimated_fare'] = fare_breakdown['total']
                 context['ride_type'] = fare_breakdown.get('ride_type', 'city')
+                context['paynow_rule'] = PricingService.get_paynow_rule()
+                context['paynow_allowed'] = PricingService.paynow_allowed(fare_breakdown['total'])
             except Exception as e:
                 logger.exception('Fare calculation failed')
                 context['fare_error'] = str(e)
@@ -540,6 +603,9 @@ class MultiStepBookingWizardView(View):
                     'arrival_flight_number': form.cleaned_data.get('arrival_flight_number'),
                     'arrival_date': _iso_date(form.cleaned_data.get('arrival_date')),
                     'arrival_time': _iso_date(form.cleaned_data.get('arrival_time')),
+                    'is_return_trip': bool(form.cleaned_data.get('is_return_trip')),
+                    'return_date': _iso_date(form.cleaned_data.get('return_date')),
+                    'return_time': _iso_date(form.cleaned_data.get('return_time')),
                 }
                 self.request.session.modified = True
                 return redirect('rides:booking_wizard', step=2)
@@ -548,6 +614,7 @@ class MultiStepBookingWizardView(View):
                     'form': form,
                     'step': step,
                     'total_steps': 4,
+                    'return_discount_percent': PricingService.get_return_discount_percent(),
                     'GOOGLE_MAPS_CLIENT_KEY': settings.GOOGLE_MAPS_CLIENT_KEY,
                     'TAXI_OWNER_PHONE': settings.TAXI_OWNER_PHONE,
                 }
@@ -568,6 +635,9 @@ class MultiStepBookingWizardView(View):
                     'baby_car_seater': form.cleaned_data['baby_car_seater'],
                     'num_kids_carried': form.cleaned_data['num_kids_carried'],
                     'luggage_count': form.cleaned_data['luggage_count'],
+                    'hand_luggage_count': form.cleaned_data.get('hand_luggage_count') or 0,
+                    'stops': form.cleaned_data.get('stops') or [],
+                    'stops_json': json.dumps(form.cleaned_data.get('stops') or []),
                     'passengers_json': passengers_json,
                     'salutation': form.cleaned_data.get('salutation'),
                     'passenger_full_name': form.cleaned_data.get('passenger_full_name'),
@@ -580,6 +650,9 @@ class MultiStepBookingWizardView(View):
                     'step': step,
                     'total_steps': 4,
                     'step1_data': wizard_data.get('step1', {}),
+                    'step2_data': wizard_data.get('step2', {}),
+                    'booking_limits': PricingService.get_booking_limits(),
+                    'stop_tiers': PricingService.get_stop_tiers(),
                     'GOOGLE_MAPS_CLIENT_KEY': settings.GOOGLE_MAPS_CLIENT_KEY,
                     'TAXI_OWNER_PHONE': settings.TAXI_OWNER_PHONE,
                 }
@@ -638,7 +711,40 @@ class MultiStepBookingWizardView(View):
                         baby_car_seater=step2.get('baby_car_seater', 0),
                         num_kids_carried=step2.get('num_kids_carried', 0),
                         luggage_count=step2.get('luggage_count', 0),
+                        hand_luggage_count=step2.get('hand_luggage_count', 0),
+                        pickup_time=step1.get('pickup_time'),
+                        stops=step2.get('stops', []),
+                        is_return_trip=step1.get('is_return_trip', False),
+                        return_time=step1.get('return_time'),
                     )
+
+                    # Paynow carries high fees on small amounts, so it is only offered
+                    # at or above the configured minimum. Re-checked here because the
+                    # step 4 radio can be re-enabled client-side.
+                    if payment_method == RideBooking.PAYMENT_PAYNOW and not PricingService.paynow_allowed(fare_breakdown['total']):
+                        paynow_rule = PricingService.get_paynow_rule()
+                        context = {
+                            'form': form,
+                            'step': step,
+                            'total_steps': 4,
+                            'step1_data': step1,
+                            'step2_data': step2,
+                            'step3_data': step3,
+                            'fare_breakdown': fare_breakdown,
+                            'estimated_fare': fare_breakdown['total'],
+                            'ride_type': fare_breakdown.get('ride_type', 'city'),
+                            'paynow_rule': paynow_rule,
+                            'paynow_allowed': False,
+                            'error_message': paynow_rule['NOTE'],
+                            'booking_limits': PricingService.get_booking_limits(),
+                            'stop_tiers': PricingService.get_stop_tiers(),
+                            'night_cfg': PricingService.get_night_cfg(),
+                            'return_discount_percent': PricingService.get_return_discount_percent(),
+                            'GOOGLE_MAPS_CLIENT_KEY': settings.GOOGLE_MAPS_CLIENT_KEY,
+                            'TAXI_OWNER_PHONE': settings.TAXI_OWNER_PHONE,
+                            'logo_url': _logo_url(),
+                        }
+                        return render(request, 'rides/booking_wizard/step4.html', context)
 
                     with transaction.atomic():
                         booking = RideBooking.objects.create(
@@ -654,6 +760,11 @@ class MultiStepBookingWizardView(View):
                             baby_car_seater=step2.get('baby_car_seater', 0),
                             num_kids_carried=step2.get('num_kids_carried', 0),
                             luggage_count=step2.get('luggage_count', 0),
+                            hand_luggage_count=step2.get('hand_luggage_count', 0),
+                            stops_json=fare_breakdown.get('stops') or [],
+                            is_return_trip=step1.get('is_return_trip', False),
+                            return_date=step1.get('return_date'),
+                            return_time=step1.get('return_time'),
                             phone=step3['phone'],
                             email=step3['email'],
                             extra_instructions=step3.get('extra_instructions', ''),
@@ -894,6 +1005,7 @@ class ChauffeurBookingWizardView(View):
             'TAXI_OWNER_PHONE': settings.TAXI_OWNER_PHONE,
             'csrf_token': get_token(self.request),
             'logo_url': _logo_url(),
+            'booking_limits': PricingService.get_booking_limits(),
         }
 
     def _label_packages(self, packages):
@@ -1007,6 +1119,8 @@ class ChauffeurBookingWizardView(View):
                 fare_breakdown = PricingService.calculate_chauffeur(hours)
                 context['fare_breakdown'] = fare_breakdown
                 context['estimated_fare'] = fare_breakdown['total']
+                context['paynow_rule'] = PricingService.get_paynow_rule()
+                context['paynow_allowed'] = PricingService.paynow_allowed(fare_breakdown['total'])
             except Exception as e:
                 logger.exception('Chauffeur fare calculation failed')
                 context['fare_error'] = str(e)
@@ -1147,6 +1261,7 @@ class ChauffeurBookingWizardView(View):
                     'baby_car_seater': form.cleaned_data['baby_car_seater'],
                     'num_kids_carried': form.cleaned_data['num_kids_carried'],
                     'luggage_count': form.cleaned_data['luggage_count'],
+                    'hand_luggage_count': form.cleaned_data.get('hand_luggage_count') or 0,
                     'salutation': form.cleaned_data.get('salutation'),
                     'passenger_full_name': form.cleaned_data.get('passenger_full_name'),
                     'passengers_over_limit': over_limit,
@@ -1206,6 +1321,26 @@ class ChauffeurBookingWizardView(View):
                 try:
                     fare_breakdown = PricingService.calculate_chauffeur(hours)
 
+                    # Paynow carries high fees on small amounts, so it is only offered
+                    # at or above the configured minimum. Re-checked here because the
+                    # payment radio can be re-enabled client-side.
+                    if payment_method == RideBooking.PAYMENT_PAYNOW and not PricingService.paynow_allowed(fare_breakdown['total']):
+                        paynow_rule = PricingService.get_paynow_rule()
+                        context.update({
+                            'form': form,
+                            'step1_data': step1,
+                            'step2_data': step2,
+                            'step3_data': step3,
+                            'step4_data': step4,
+                            'selected_package': selected_package,
+                            'fare_breakdown': fare_breakdown,
+                            'estimated_fare': fare_breakdown['total'],
+                            'paynow_rule': paynow_rule,
+                            'paynow_allowed': False,
+                            'error_message': paynow_rule['NOTE'],
+                        })
+                        return render(request, 'rides/chauffeur_wizard/step5.html', context)
+
                     # Build full pickup address including any additional detail
                     full_pickup = step2.get('pickup_address', '')
                     if step2.get('pickup_address_detail'):
@@ -1228,6 +1363,7 @@ class ChauffeurBookingWizardView(View):
                             baby_car_seater=step3.get('baby_car_seater', 0),
                             num_kids_carried=step3.get('num_kids_carried', 0),
                             luggage_count=step3.get('luggage_count', 0),
+                            hand_luggage_count=step3.get('hand_luggage_count', 0),
                             phone=step4['phone'],
                             email=step4['email'],
                             extra_instructions=step2.get('trip_summary', ''),
@@ -2052,3 +2188,153 @@ class PaynowPollView(APIView):
 
         logger.info('Poll result: Payment still pending or failed')
         return Response({'paid': False, 'status': status_obj.get('status'), 'message': 'Payment not yet confirmed'})
+
+
+# ============================================================================
+# Customer self-service: manage a booking from an emailed magic link
+# ============================================================================
+
+class ManageBookingView(View):
+    """Let a customer reschedule or cancel their own booking.
+
+    Access is proved by the signed token in the URL — there are no customer
+    accounts. Every state change re-checks the cut-off server-side, because the
+    link stays valid after the window closes.
+    """
+
+    template_name = 'rides/manage_booking.html'
+
+    def _context(self, request, booking, **extra):
+        from rides.services.booking_access import self_service_state
+        state = self_service_state(booking)
+        context = {
+            'booking': booking,
+            'logo_url': _logo_url(),
+            'TAXI_OWNER_PHONE': settings.TAXI_OWNER_PHONE,
+            'csrf_token': get_token(request),
+        }
+        context.update(state)
+        context.update(extra)
+        return context
+
+    def get(self, request, token):
+        from rides.services.booking_access import load_booking
+        booking = load_booking(token)
+        if booking is None:
+            return render(request, self.template_name, {
+                'invalid_link': True,
+                'logo_url': _logo_url(),
+                'TAXI_OWNER_PHONE': settings.TAXI_OWNER_PHONE,
+            }, status=404)
+
+        return render(request, self.template_name, self._context(request, booking, token=token))
+
+    def post(self, request, token):
+        from rides.services.booking_access import load_booking, self_service_state
+
+        booking = load_booking(token)
+        if booking is None:
+            return render(request, self.template_name, {
+                'invalid_link': True,
+                'logo_url': _logo_url(),
+                'TAXI_OWNER_PHONE': settings.TAXI_OWNER_PHONE,
+            }, status=404)
+
+        action = request.POST.get('action', '')
+        state = self_service_state(booking)
+
+        if action == 'cancel':
+            return self._handle_cancel(request, booking, token, state)
+        if action == 'reschedule':
+            return self._handle_reschedule(request, booking, token, state)
+
+        return redirect('rides:manage_booking', token=token)
+
+    # ------------------------------------------------------------------ cancel
+    def _handle_cancel(self, request, booking, token, state):
+        if not state['can_cancel']:
+            return render(request, self.template_name, self._context(
+                request, booking, token=token,
+                error_message=state['blocked_reason'] or 'This booking can no longer be cancelled online.',
+            ))
+
+        booking.status = RideBooking.STATUS_CANCELLED
+        booking.cancelled_at = timezone.now()
+        booking.cancelled_by_customer = True
+        booking.log_change('cancelled', 'Cancelled by the customer from their booking link.')
+        booking.save()
+
+        try:
+            EmailService.send_booking_cancelled(booking)
+        except Exception:
+            logger.exception('Failed to send cancellation emails for booking %s', booking.id)
+
+        return render(request, self.template_name, self._context(
+            request, booking, token=token,
+            success_message='Your booking has been cancelled. We have let the team know.',
+        ))
+
+    # -------------------------------------------------------------- reschedule
+    def _handle_reschedule(self, request, booking, token, state):
+        if not state['can_reschedule']:
+            return render(request, self.template_name, self._context(
+                request, booking, token=token,
+                error_message=state['blocked_reason'] or 'This booking can no longer be changed online.',
+            ))
+
+        form = RescheduleBookingForm(request.POST, booking=booking)
+        if not form.is_valid():
+            return render(request, self.template_name, self._context(
+                request, booking, token=token, form=form,
+                error_message='; '.join(form.errors.get('__all__', [])) or 'Please check the dates and times below.',
+            ))
+
+        old_pickup = f"{booking.pickup_date} {booking.pickup_time}"
+        booking.pickup_date = form.cleaned_data['pickup_date']
+        booking.pickup_time = form.cleaned_data['pickup_time']
+
+        detail = f"Pickup moved from {old_pickup} to {booking.pickup_date} {booking.pickup_time}."
+
+        if booking.is_return_trip and form.cleaned_data.get('return_date'):
+            old_return = f"{booking.return_date} {booking.return_time}"
+            booking.return_date = form.cleaned_data['return_date']
+            booking.return_time = form.cleaned_data['return_time']
+            detail += f" Return moved from {old_return} to {booking.return_date} {booking.return_time}."
+
+        # The night surcharge depends on the time of day, so the fare is re-priced.
+        old_total = booking.total_amount
+        try:
+            breakdown = _calculate_fare(
+                distance_km=float(booking.distance_km or 0),
+                num_adults=booking.num_adults,
+                baby_car_seater=booking.baby_car_seater,
+                num_kids_carried=booking.num_kids_carried,
+                luggage_count=booking.luggage_count,
+                hand_luggage_count=booking.hand_luggage_count,
+                pickup_time=booking.pickup_time,
+                stops=booking.stops_json or [],
+                is_return_trip=booking.is_return_trip,
+                return_time=booking.return_time,
+            )
+            booking.price_breakdown = breakdown
+            booking.total_amount = Decimal(str(breakdown['total']))
+            if booking.total_amount != old_total:
+                detail += f" Fare updated from ${old_total} to ${booking.total_amount}."
+        except Exception:
+            logger.exception('Could not re-price booking %s after reschedule', booking.id)
+
+        booking.log_change('rescheduled', detail)
+        booking.save()
+
+        try:
+            EmailService.send_booking_rescheduled(booking, detail)
+        except Exception:
+            logger.exception('Failed to send reschedule emails for booking %s', booking.id)
+
+        message = 'Your booking has been updated. A confirmation is on its way to your inbox.'
+        if booking.total_amount != old_total:
+            message += f' Your new fare is ${booking.total_amount}.'
+
+        return render(request, self.template_name, self._context(
+            request, booking, token=token, success_message=message,
+        ))
