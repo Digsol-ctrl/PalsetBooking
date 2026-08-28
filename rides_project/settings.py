@@ -40,6 +40,7 @@ INSTALLED_APPS = [
 
     # local
     "rides",
+    "content",
 ]
 
 
@@ -109,7 +110,9 @@ AUTH_PASSWORD_VALIDATORS = [
 
 # Internationalization
 LANGUAGE_CODE = "en-us"
-TIME_ZONE = "UTC"
+# Local time for the business (Harare, UTC+2). Booking cut-off checks compare the
+# customer's chosen pickup time against local "now", so this must not be UTC.
+TIME_ZONE = "Africa/Harare"
 USE_I18N = True
 USE_TZ = True
 
@@ -119,6 +122,18 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 
 STATICFILES_STORAGE = "whitenoise.storage.CompressedStaticFilesStorage"
+
+# Uploaded media (blog cover images and gallery photos).
+# MEDIA_ROOT must be writable by the app and must persist across deploys —
+# on shared hosting keep it outside the directory the deploy replaces.
+MEDIA_URL = "/media/"
+MEDIA_ROOT = Path(os.getenv("MEDIA_ROOT", BASE_DIR / "media"))
+
+# Largest upload accepted, in bytes (default 8MB). Guards against a huge photo
+# filling the disk or timing out the request.
+MAX_UPLOAD_SIZE = int(os.getenv("MAX_UPLOAD_SIZE", 8 * 1024 * 1024))
+DATA_UPLOAD_MAX_MEMORY_SIZE = MAX_UPLOAD_SIZE
+FILE_UPLOAD_MAX_MEMORY_SIZE = MAX_UPLOAD_SIZE
 
 
 # Email
@@ -146,6 +161,9 @@ DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "EasyTransit <lzambwi@gmail
 # GOOGLE_MAPS_API_KEY env var is still accepted if either new var is not set.
 GOOGLE_MAPS_CLIENT_KEY = os.getenv("GOOGLE_MAPS_CLIENT_KEY", "")
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", GOOGLE_MAPS_CLIENT_KEY)
+# Server-side key for Distance Matrix. DistanceService prefers this over the client
+# key so the browser key can stay referrer-restricted; falls back when unset.
+GOOGLE_MAPS_SERVER_KEY = os.getenv("GOOGLE_MAPS_SERVER_KEY", GOOGLE_MAPS_API_KEY)
 
 # Cache timeout for distance results (seconds)
 GOOGLE_DISTANCE_CACHE_TIMEOUT = int(os.getenv("GOOGLE_DISTANCE_CACHE_TIMEOUT", str(6 * 3600)))

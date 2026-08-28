@@ -238,6 +238,12 @@
       </a>
     </li>
     <li>
+      <a href="{% url 'dashboard_content:posts' %}" class="{% if 'post' in request.resolver_match.url_name %}active{% endif %}">
+        <i class="bi bi-newspaper"></i> <span>Blog</span>
+      </a>
+      <a href="{% url 'dashboard_content:gallery' %}" class="{% if 'gallery' in request.resolver_match.url_name %}active{% endif %}">
+        <i class="bi bi-images"></i> <span>Gallery</span>
+      </a>
       <a href="{% url 'dashboard:notifications' %}" class="{% if request.resolver_match.url_name == 'notifications' %}active{% endif %}">
         <i class="bi bi-bell-fill"></i> Notifications
       </a>

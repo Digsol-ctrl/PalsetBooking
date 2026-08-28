@@ -1,5 +1,6 @@
 import uuid
 import re
+from datetime import time as dt_time
 from decimal import Decimal
 from django.db import models
 from django.core.validators import MinValueValidator
@@ -44,6 +45,15 @@ class RideBooking(models.Model):
     baby_car_seater = models.PositiveSmallIntegerField(default=0)
     num_kids_carried = models.PositiveSmallIntegerField(default=0)
     luggage_count = models.PositiveSmallIntegerField(default=0)
+    hand_luggage_count = models.PositiveSmallIntegerField(default=0)
+
+    # Stops along the way: list of {"description": str, "minutes": int, "fee": float}
+    stops_json = JSONField(null=True, blank=True)
+
+    # Return trip: the same booking covers the journey back
+    is_return_trip = models.BooleanField(default=False)
+    return_date = models.DateField(null=True, blank=True)
+    return_time = models.TimeField(null=True, blank=True)
 
     phone = models.CharField(max_length=32)
     email = models.EmailField()
@@ -95,8 +105,24 @@ class RideBooking(models.Model):
     chauffeur_package_label = models.CharField(max_length=64, null=True, blank=True)
     passengers_over_limit = models.BooleanField(default=False)
 
+    # Customer self-service (magic-link "manage my booking")
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    cancelled_by_customer = models.BooleanField(default=False)
+    # Audit trail of customer-made changes: [{"at": iso, "action": str, "detail": str}]
+    change_log = JSONField(null=True, blank=True)
+
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
+
+    def log_change(self, action: str, detail: str = ''):
+        """Append an entry to the customer-facing change history."""
+        entries = list(self.change_log or [])
+        entries.append({
+            'at': timezone.now().isoformat(timespec='seconds'),
+            'action': action,
+            'detail': detail,
+        })
+        self.change_log = entries
 
     def __str__(self):
         ref = self.reference if self.reference else str(self.id)
@@ -163,6 +189,90 @@ class SiteSettings(models.Model):
     long_distance_free_luggage = models.PositiveSmallIntegerField(default=5)
     long_distance_luggage_fee = models.DecimalField(max_digits=6, decimal_places=2, default=5.0)
 
+    # Customer self-service on their own booking
+    allow_customer_reschedule = models.BooleanField(
+        default=True, help_text='Let customers change their pickup date and time from the emailed link.'
+    )
+    allow_customer_cancellation = models.BooleanField(
+        default=True, help_text='Let customers cancel their booking from the emailed link.'
+    )
+    booking_change_cutoff_hours = models.PositiveSmallIntegerField(
+        default=12,
+        help_text=(
+            'Customers can no longer change or cancel once the pickup is this many '
+            'hours away. 0 = allowed right up to the pickup time.'
+        )
+    )
+
+    # Return trips
+    return_trip_discount_percent = models.DecimalField(
+        max_digits=5, decimal_places=2, default=0.00,
+        help_text=(
+            'Percentage taken off the return leg when a customer books a round trip. '
+            '0 = the return leg costs the same as the outbound leg.'
+        )
+    )
+
+    # Night pickup surcharge (applies to city and long distance rides)
+    night_surcharge_enabled = models.BooleanField(
+        default=True, help_text='Charge extra for pickups during the night window.'
+    )
+    night_surcharge_amount = models.DecimalField(
+        max_digits=6, decimal_places=2, default=10.00,
+        help_text='Flat amount added to the fare for pickups inside the night window.'
+    )
+    night_start = models.TimeField(
+        default=dt_time(22, 0), help_text='Start of the night window (e.g. 22:00).'
+    )
+    night_end = models.TimeField(
+        default=dt_time(4, 0), help_text='End of the night window (e.g. 04:00). May cross midnight.'
+    )
+
+    # Stops along the way — charged per stop, by how long the stop lasts.
+    # Each entry: {"max_minutes": 10, "price": 0}
+    stop_tiers = JSONField(
+        default=list,
+        help_text=(
+            'Charge bands for a stop along the way, per stop. Each entry needs '
+            'max_minutes (int) and price (decimal); the first band whose max_minutes '
+            'covers the stop is charged.'
+        )
+    )
+
+    # Hand luggage (applies to both city and long distance)
+    hand_luggage_free = models.PositiveSmallIntegerField(
+        default=1, help_text='Hand luggage items included free per booking.'
+    )
+    hand_luggage_fee = models.DecimalField(
+        max_digits=6, decimal_places=2, default=0.00,
+        help_text='Charge per hand luggage item beyond the free allowance. 0 = hand luggage always free.'
+    )
+
+    # Booking limits (0 = no limit)
+    max_passengers = models.PositiveSmallIntegerField(
+        default=0, help_text='Maximum passengers a customer may select. 0 = no limit.'
+    )
+    max_luggage = models.PositiveSmallIntegerField(
+        default=0, help_text='Maximum luggage bags a customer may select. 0 = no limit.'
+    )
+    max_hand_luggage = models.PositiveSmallIntegerField(
+        default=0, help_text='Maximum hand luggage items a customer may select. 0 = no limit.'
+    )
+
+    # Paynow minimum amount rule
+    paynow_min_amount = models.DecimalField(
+        max_digits=8, decimal_places=2, default=201.00,
+        help_text='Paynow is only offered when the fare is at or above this amount (Paynow fees are high on small amounts). 0 = always offer Paynow.'
+    )
+    paynow_min_note = models.TextField(
+        default=(
+            'Paynow is only available for bookings of $201 and above. '
+            'For $200 and below, please pay via Paylink or a money transfer agency '
+            '(Western Union, Mukuru, WorldRemit, etc.).'
+        ),
+        help_text='Message shown to customers when their fare is below the Paynow minimum.'
+    )
+
     # Chauffeur Drive Packages (JSON list)
     # Each entry: {"hours": 4, "price": 100, "km_limit": 100,
     #              "window_start": "07:30", "window_end": "17:00", "max_passengers": 4}
@@ -200,6 +310,8 @@ class SiteSettings(models.Model):
             "EXTRA_ADULT_FEE": float(self.pricing_extra_adult_fee),
             "FREE_LUGGAGE_ITEMS": self.pricing_free_luggage,
             "LUGGAGE_FEE": float(self.pricing_luggage_fee),
+            "HAND_LUGGAGE_FREE_ITEMS": int(self.hand_luggage_free or 0),
+            "HAND_LUGGAGE_FEE": float(self.hand_luggage_fee or 0),
         }
 
     def get_long_distance_cfg(self):
@@ -210,6 +322,54 @@ class SiteSettings(models.Model):
             "EXTRA_PAX_FEE": float(self.long_distance_extra_pax_fee),
             "FREE_LUGGAGE_ITEMS": self.long_distance_free_luggage,
             "LUGGAGE_FEE": float(self.long_distance_luggage_fee),
+            "HAND_LUGGAGE_FREE_ITEMS": int(self.hand_luggage_free or 0),
+            "HAND_LUGGAGE_FEE": float(self.hand_luggage_fee or 0),
+        }
+
+    def get_self_service_cfg(self):
+        return {
+            "ALLOW_RESCHEDULE": bool(self.allow_customer_reschedule),
+            "ALLOW_CANCELLATION": bool(self.allow_customer_cancellation),
+            "CUTOFF_HOURS": int(self.booking_change_cutoff_hours or 0),
+        }
+
+    def get_return_discount(self):
+        """Return leg discount as a fraction between 0 and 1."""
+        try:
+            pct = float(self.return_trip_discount_percent or 0)
+        except (TypeError, ValueError):
+            return 0.0
+        return max(0.0, min(pct, 100.0)) / 100.0
+
+    def get_night_cfg(self):
+        return {
+            "ENABLED": bool(self.night_surcharge_enabled),
+            "AMOUNT": float(self.night_surcharge_amount or 0),
+            "START": self.night_start or dt_time(22, 0),
+            "END": self.night_end or dt_time(4, 0),
+        }
+
+    def get_stop_tiers(self):
+        default = [
+            {"max_minutes": 10, "price": 0},
+            {"max_minutes": 20, "price": 5},
+            {"max_minutes": 30, "price": 15},
+            {"max_minutes": 60, "price": 30},
+        ]
+        return self.stop_tiers or default
+
+    def get_hand_luggage_cfg(self):
+        return {
+            "FREE_ITEMS": int(self.hand_luggage_free or 0),
+            "FEE": float(self.hand_luggage_fee or 0),
+        }
+
+    def get_limits_cfg(self):
+        """Counter limits for the booking wizard. 0 means no limit."""
+        return {
+            "MAX_PASSENGERS": int(self.max_passengers or 0),
+            "MAX_LUGGAGE": int(self.max_luggage or 0),
+            "MAX_HAND_LUGGAGE": int(self.max_hand_luggage or 0),
         }
 
     def get_chauffeur_packages(self):

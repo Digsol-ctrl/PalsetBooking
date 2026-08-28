@@ -60,6 +60,16 @@ class CreateBookingSerializer(serializers.Serializer):
         if data.get('pickup_is_airport'):
             if not data.get('arrival_airline') or not data.get('arrival_flight_number'):
                 raise serializers.ValidationError("For airport pickups 'arrival_airline' and 'arrival_flight_number' are required.")
+
+        # A lapsed pickup is rejected here too, so the API cannot create the past-dated
+        # bookings the booking wizard already refuses.
+        from django.core.exceptions import ValidationError as DjangoValidationError
+        from .forms import _reject_past_pickup
+        try:
+            _reject_past_pickup(data.get('pickup_date'), data.get('pickup_time'))
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages)
+
         return data
     phone = serializers.CharField(max_length=32)
     email = serializers.EmailField()

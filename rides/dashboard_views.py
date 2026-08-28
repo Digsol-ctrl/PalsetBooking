@@ -101,7 +101,7 @@ class DashboardLogoutView(View):
 class DashboardOverviewView(View):
     @_require_dashboard
     def get(self, request):
-        today = timezone.now().date()
+        today = timezone.localdate()
         week_ago = today - timedelta(days=6)
 
         # Stat cards
@@ -148,7 +148,7 @@ class DashboardChartDataView(View):
     def get(self, request):
         days = int(request.GET.get('days', 7))
         days = min(days, 365)
-        today = timezone.now().date()
+        today = timezone.localdate()
         labels = []
         data = []
         for i in range(days - 1, -1, -1):
@@ -184,7 +184,7 @@ class DashboardBookingsView(View):
         if status_filter in (RideBooking.STATUS_PENDING, RideBooking.STATUS_CONFIRMED, RideBooking.STATUS_CANCELLED):
             qs = qs.filter(status=status_filter)
 
-        today = timezone.now().date()
+        today = timezone.localdate()
         if date_filter == '7days':
             qs = qs.filter(created_at__date__gte=today - timedelta(days=6))
         elif date_filter == '30days':
@@ -455,6 +455,7 @@ class DashboardSettingsView(View):
             'pricing_brackets': brackets,
             'last_bracket_max': last_bracket_max,
             'chauffeur_packages': chauffeur_packages,
+            'stop_tiers': site_settings.get_stop_tiers(),
             'ld_default_threshold': DEFAULT_LONG_DISTANCE['THRESHOLD_KM'],
             'ld_default_per_km': DEFAULT_LONG_DISTANCE['PER_KM'],
             'ld_default_base_pax': DEFAULT_LONG_DISTANCE['BASE_PASSENGERS'],
@@ -507,6 +508,66 @@ class DashboardSettingsView(View):
                 messages.success(request, 'Long distance pricing updated successfully.')
             except (ValueError, TypeError) as e:
                 messages.error(request, f'Invalid long distance pricing value: {e}')
+
+        elif form_type == 'self_service':
+            try:
+                site_settings.allow_customer_reschedule = bool(request.POST.get('allow_customer_reschedule'))
+                site_settings.allow_customer_cancellation = bool(request.POST.get('allow_customer_cancellation'))
+                site_settings.booking_change_cutoff_hours = int(request.POST.get('booking_change_cutoff_hours', 12) or 0)
+                site_settings.save()
+                messages.success(request, 'Customer self-service settings updated successfully.')
+            except (ValueError, TypeError) as e:
+                messages.error(request, f'Invalid self-service value: {e}')
+
+        elif form_type == 'night':
+            try:
+                site_settings.night_surcharge_enabled = bool(request.POST.get('night_surcharge_enabled'))
+                site_settings.night_surcharge_amount = float(request.POST.get('night_surcharge_amount', 0) or 0)
+                night_start = (request.POST.get('night_start') or '').strip()
+                night_end = (request.POST.get('night_end') or '').strip()
+                if night_start:
+                    site_settings.night_start = night_start
+                if night_end:
+                    site_settings.night_end = night_end
+                site_settings.save()
+                messages.success(request, 'Night pickup surcharge updated successfully.')
+            except (ValueError, TypeError) as e:
+                messages.error(request, f'Invalid night surcharge value: {e}')
+
+        elif form_type == 'stops':
+            try:
+                tiers = []
+                minutes_list = request.POST.getlist('stop_max_minutes')
+                price_list = request.POST.getlist('stop_price')
+                for minutes, price in zip(minutes_list, price_list):
+                    if minutes:
+                        tiers.append({
+                            "max_minutes": int(minutes),
+                            "price": float(price or 0),
+                        })
+                # Shortest band first so the first covering band is the one charged
+                site_settings.stop_tiers = sorted(tiers, key=lambda t: t['max_minutes'])
+                site_settings.save()
+                messages.success(request, 'Stop charges updated successfully.')
+            except (ValueError, TypeError) as e:
+                messages.error(request, f'Invalid stop charge value: {e}')
+
+        elif form_type == 'booking_rules':
+            try:
+                site_settings.max_passengers = int(request.POST.get('max_passengers', 0) or 0)
+                site_settings.max_luggage = int(request.POST.get('max_luggage', 0) or 0)
+                site_settings.max_hand_luggage = int(request.POST.get('max_hand_luggage', 0) or 0)
+                site_settings.hand_luggage_free = int(request.POST.get('hand_luggage_free', 1) or 0)
+                site_settings.hand_luggage_fee = float(request.POST.get('hand_luggage_fee', 0) or 0)
+                site_settings.paynow_min_amount = float(request.POST.get('paynow_min_amount', 201) or 0)
+                site_settings.return_trip_discount_percent = float(request.POST.get('return_trip_discount_percent', 0) or 0)
+                note = (request.POST.get('paynow_min_note') or '').strip()
+                if note:
+                    site_settings.paynow_min_note = note
+                site_settings.save()
+                messages.success(request, 'Booking rules updated successfully.')
+            except (ValueError, TypeError) as e:
+                messages.error(request, f'Invalid booking rule value: {e}')
 
         elif form_type == 'chauffeur':
             try:

@@ -1,6 +1,9 @@
+from datetime import timedelta
+
 import pytest
 from rest_framework.test import APIClient
 from django.urls import reverse
+from django.utils import timezone
 
 from rides.models import RideBooking, Payment
 from rides.services.pricing import PricingService
@@ -30,6 +33,9 @@ def test_booking_pay_on_arrival_uses_distance_service(monkeypatch):
         'phone': '+263789000000',
         'email': 'test@example.com',
         'payment_option': RideBooking.PAYMENT_ON_ARRIVAL,
+        'passenger_full_name': 'Test Passenger',
+        'pickup_date': (timezone.localtime() + timedelta(days=2)).date().isoformat(),
+        'pickup_time': '10:00',
     }
 
     resp = client.post(reverse('rides:create_booking'), payload, format='json')
@@ -78,6 +84,9 @@ def test_booking_paynow_initiates_transaction(monkeypatch):
         'phone': '+263789000000',
         'email': 'test@example.com',
         'payment_option': RideBooking.PAYMENT_PAYNOW,
+        'passenger_full_name': 'Test Passenger',
+        'pickup_date': (timezone.localtime() + timedelta(days=2)).date().isoformat(),
+        'pickup_time': '10:00',
     }
 
     resp = client.post(reverse('rides:create_booking'), payload, format='json')

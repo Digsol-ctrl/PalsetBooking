@@ -64,9 +64,60 @@
             <div style="font-size:14px;color:#374151;margin-top:4px">{{ booking.email }}</div>
           </div>
           <div class="col-sm-6">
-            <div style="font-size:11px;color:#9ca3af;font-weight:700;text-transform:uppercase;letter-spacing:.5px">Adults / Kids</div>
-            <div style="font-size:14px;color:#374151;margin-top:4px">{{ booking.num_adults }} adults, {{ booking.num_kids_carried }} kids, {{ booking.luggage_count }} bags</div>
+            <div style="font-size:11px;color:#9ca3af;font-weight:700;text-transform:uppercase;letter-spacing:.5px">Passengers</div>
+            <div style="font-size:14px;color:#374151;margin-top:4px">
+              {{ booking.num_adults }} seated, {{ booking.num_kids_carried }} kids carried{% if booking.baby_car_seater %}, {{ booking.baby_car_seater }} baby seat{{ booking.baby_car_seater|pluralize }}{% endif %}
+            </div>
           </div>
+          <div class="col-sm-6">
+            <div style="font-size:11px;color:#9ca3af;font-weight:700;text-transform:uppercase;letter-spacing:.5px">Luggage</div>
+            <div style="font-size:14px;color:#374151;margin-top:4px">{{ booking.luggage_count }} bags, {{ booking.hand_luggage_count }} hand luggage</div>
+          </div>
+          {% if booking.is_return_trip %}
+          <div class="col-sm-6">
+            <div style="font-size:11px;color:#9ca3af;font-weight:700;text-transform:uppercase;letter-spacing:.5px">Return Trip</div>
+            <div style="font-size:14px;color:#047857;margin-top:4px;font-weight:600">
+              <i class="bi bi-arrow-left-right me-1"></i>{{ booking.return_date }} at {{ booking.return_time }}
+              {% if booking.price_breakdown.return_leg_fee %}&mdash; ${{ booking.price_breakdown.return_leg_fee|floatformat:2 }}{% endif %}
+            </div>
+          </div>
+          {% endif %}
+          {% if booking.price_breakdown.night_surcharge %}
+          <div class="col-sm-6">
+            <div style="font-size:11px;color:#9ca3af;font-weight:700;text-transform:uppercase;letter-spacing:.5px">Night Pickup</div>
+            <div style="font-size:14px;color:#4338ca;margin-top:4px;font-weight:600">
+              <i class="bi bi-moon-stars-fill me-1"></i>${{ booking.price_breakdown.night_surcharge|floatformat:2 }} surcharge applied
+            </div>
+          </div>
+          {% endif %}
+          {% if booking.change_log %}
+          <div class="col-12">
+            <div style="font-size:11px;color:#9ca3af;font-weight:700;text-transform:uppercase;letter-spacing:.5px">Customer Changes</div>
+            <div style="font-size:13px;color:#374151;margin-top:4px;background:#fffbeb;padding:10px;border-radius:6px;border-left:3px solid #f59e0b">
+              {% for entry in booking.change_log %}
+              <div style="padding:3px 0{% if not forloop.last %};border-bottom:1px solid #fde68a{% endif %}">
+                <strong style="text-transform:capitalize">{{ entry.action }}</strong>
+                <span style="color:#92400e">&mdash; {{ entry.detail }}</span>
+                <div style="font-size:11px;color:#a16207">{{ entry.at }}</div>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
+          {% if booking.stops_json %}
+          <div class="col-12">
+            <div style="font-size:11px;color:#9ca3af;font-weight:700;text-transform:uppercase;letter-spacing:.5px">Stops Along The Way</div>
+            <div style="font-size:14px;color:#374151;margin-top:4px;background:#f0f9ff;padding:10px;border-radius:6px">
+              {% for stop in booking.stops_json %}
+              <div style="padding:3px 0{% if not forloop.last %};border-bottom:1px solid #e0f2fe{% endif %}">
+                <strong>{{ forloop.counter }}.</strong> {{ stop.description|default:"Stop" }}
+                &mdash; up to {{ stop.minutes }} min
+                <span style="color:#0369a1;font-weight:600">({% if stop.fee %}${{ stop.fee|floatformat:2 }}{% else %}Free{% endif %})</span>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+          {% endif %}
           {% if booking.extra_instructions %}
           <div class="col-12">
             <div style="font-size:11px;color:#9ca3af;font-weight:700;text-transform:uppercase;letter-spacing:.5px">Notes</div>

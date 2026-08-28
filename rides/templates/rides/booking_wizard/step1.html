@@ -128,6 +128,48 @@
         </div>
     </div>
 
+    <!-- Return Trip -->
+    <div style="margin-top:16px;padding:14px 16px;background:#f0fdf4;border:2px solid #86efac;border-radius:10px;">
+        <label for="is_return_trip" style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin:0;">
+            {{ form.is_return_trip }}
+            <span>
+                <span style="font-weight:700;color:#065f46;display:block;">
+                    <i class="bi bi-arrow-left-right"></i> Book a return trip
+                </span>
+                <span style="font-size:13px;color:#047857;">
+                    One booking for the journey there and back &mdash; we&rsquo;ll collect you again at the time you choose.
+                </span>
+            </span>
+        </label>
+
+        <div id="return_fields" style="display:none;margin-top:14px;">
+            <div class="form-row" style="display:flex;gap:12px;">
+                <div style="flex:1">
+                    <label for="return_date" class="form-label">Return Date</label>
+                    {{ form.return_date }}
+                </div>
+                <div style="flex:1">
+                    <label for="return_time" class="form-label">Return Time</label>
+                    {{ form.return_time }}
+                </div>
+            </div>
+            <div style="font-size:12px;color:#047857;margin-top:8px;">
+                The return leg is charged the same as the outbound trip{% if return_discount_percent %},
+                less your {{ return_discount_percent|floatformat:"-2" }}% round-trip discount{% endif %}.
+            </div>
+            {% if form.return_date.errors or form.return_time.errors %}
+            <div class="error-message" style="margin-top:8px;">
+                {% for error in form.return_date.errors %}{{ error }}{% endfor %}
+                {% for error in form.return_time.errors %}{{ error }}{% endfor %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Past date/time warning -->
+    <div id="schedule_error" class="error-message"
+         style="display:none;margin:12px 0;padding:10px 14px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;color:#991b1b;font-weight:600;"></div>
+
     <!-- Map Preview -->
     <div class="map-container" id="map"></div>
 
@@ -329,6 +371,40 @@
         .catch(() => {});
     }
 
+    // --- Past date/time guard -------------------------------------------------
+    // Mirrors the server-side check; a lapsed date or time can never be booked.
+    function localTodayISO() {
+        const now = new Date();
+        const offsetMs = now.getTimezoneOffset() * 60000;
+        return new Date(now - offsetMs).toISOString().slice(0, 10);
+    }
+
+    function isFutureSchedule(dateValue, timeValue) {
+        if (!dateValue || !timeValue) return false;
+        const scheduled = new Date(`${dateValue}T${timeValue}`);
+        if (isNaN(scheduled.getTime())) return false;
+        return scheduled.getTime() >= Date.now();
+    }
+
+    function applyMinDates() {
+        const today = localTodayISO();
+        ['pickup_date', 'id_arrival_date', 'return_date'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.setAttribute('min', today);
+        });
+    }
+
+    function showScheduleError(message) {
+        const box = document.getElementById('schedule_error');
+        if (!box) return;
+        if (message) {
+            box.textContent = message;
+            box.style.display = 'block';
+        } else {
+            box.style.display = 'none';
+        }
+    }
+
     function validateStep1() {
         const pickupLat = document.getElementById('pickup_latitude').value;
         const pickupLng = document.getElementById('pickup_longitude').value;
@@ -347,13 +423,56 @@
             const arrivalTime = document.getElementById('id_arrival_time') ? document.getElementById('id_arrival_time').value : '';
             airportValid = airline.trim().length > 0 && flight.trim().length > 0;
             scheduleValid = arrivalDate.trim().length > 0 && arrivalTime.trim().length > 0;
+            if (scheduleValid && !isFutureSchedule(arrivalDate, arrivalTime)) {
+                scheduleValid = false;
+                showScheduleError('That arrival date and time have already passed. Please choose a future date and time.');
+            } else {
+                showScheduleError('');
+            }
         } else {
             const pickupDate = document.getElementById('pickup_date') ? document.getElementById('pickup_date').value : '';
             const pickupTime = document.getElementById('pickup_time') ? document.getElementById('pickup_time').value : '';
             scheduleValid = pickupDate.trim().length > 0 && pickupTime.trim().length > 0;
+            if (scheduleValid && !isFutureSchedule(pickupDate, pickupTime)) {
+                scheduleValid = false;
+                showScheduleError('That pickup date and time have already passed. Please choose a future date and time.');
+            } else {
+                showScheduleError('');
+            }
         }
 
-        const isValid = baseValid && airportValid && scheduleValid;
+        // A return trip needs its own date and time, after the outbound pickup.
+        let returnValid = true;
+        const returnCheckbox = document.getElementById('is_return_trip');
+        if (returnCheckbox && returnCheckbox.checked) {
+            const returnDate = document.getElementById('return_date') ? document.getElementById('return_date').value : '';
+            const returnTime = document.getElementById('return_time') ? document.getElementById('return_time').value : '';
+            returnValid = returnDate.trim().length > 0 && returnTime.trim().length > 0;
+
+            if (returnValid && !isFutureSchedule(returnDate, returnTime)) {
+                returnValid = false;
+                showScheduleError('That return date and time have already passed. Please choose a future date and time.');
+            } else if (returnValid) {
+                // Compare against whichever schedule the outbound leg is using
+                const airportChecked = airportCheckbox && airportCheckbox.checked;
+                const outDate = airportChecked
+                    ? (document.getElementById('id_arrival_date') || {}).value
+                    : (document.getElementById('pickup_date') || {}).value;
+                const outTime = airportChecked
+                    ? (document.getElementById('id_arrival_time') || {}).value
+                    : (document.getElementById('pickup_time') || {}).value;
+                if (outDate && outTime) {
+                    const outbound = new Date(`${outDate}T${outTime}`);
+                    const back = new Date(`${returnDate}T${returnTime}`);
+                    if (back <= outbound) {
+                        returnValid = false;
+                        showScheduleError('The return trip must be after your pickup date and time.');
+                    }
+                }
+            }
+        }
+
+        const isValid = baseValid && airportValid && scheduleValid && returnValid;
         document.getElementById('next_btn').disabled = !isValid;
 
         if (isValid) {
@@ -421,6 +540,7 @@
 
     // Initialize on page load
     window.addEventListener('load', () => {
+        applyMinDates();
         initMap();
         initAutocomplete();
         // Airport checkbox toggle
@@ -441,6 +561,19 @@
             airportCheckbox.addEventListener('change', toggleAirportFields);
             toggleAirportFields();
         }
+        // Return trip toggle
+        const returnCheckbox = document.getElementById('is_return_trip');
+        const returnFields = document.getElementById('return_fields');
+        function toggleReturnFields() {
+            if (returnFields) {
+                returnFields.style.display = (returnCheckbox && returnCheckbox.checked) ? 'block' : 'none';
+            }
+            validateStep1();
+        }
+        if (returnCheckbox) {
+            returnCheckbox.addEventListener('change', toggleReturnFields);
+            toggleReturnFields();
+        }
         // Check if Maps loaded successfully
         setTimeout(() => {
             if (!map) {
@@ -458,7 +591,7 @@
                 updateMap();
             }
 
-            ['pickup_date', 'pickup_time', 'id_arrival_airline', 'id_arrival_flight_number', 'id_arrival_date', 'id_arrival_time'].forEach((id) => {
+            ['pickup_date', 'pickup_time', 'id_arrival_airline', 'id_arrival_flight_number', 'id_arrival_date', 'id_arrival_time', 'return_date', 'return_time'].forEach((id) => {
                 const el = document.getElementById(id);
                 if (el) {
                     el.addEventListener('change', validateStep1);

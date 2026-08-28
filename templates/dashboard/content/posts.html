@@ -1,0 +1,90 @@
+{% extends "dashboard/base.html" %}
+{% block title %}Blog — Easy Transit Dashboard{% endblock %}
+{% block page_title %}Blog{% endblock %}
+
+{% block content %}
+<div style="display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:18px">
+  <div style="font-size:13px;color:#6b7280">
+    Posts appear on the public <a href="{% url 'content:blog_list' %}" target="_blank" style="color:#059652;font-weight:600">News page</a>.
+    Untick &ldquo;published&rdquo; to keep one as a draft.
+  </div>
+  {% if can_edit %}
+  <a href="{% url 'dashboard_content:post_create' %}" class="btn-green" style="text-decoration:none">
+    <i class="bi bi-plus-lg me-2"></i>New post
+  </a>
+  {% endif %}
+</div>
+
+<div class="dash-card">
+  <div class="dash-card-body" style="padding:0">
+    {% if posts %}
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;min-width:620px">
+        <thead>
+          <tr style="background:#f9fafb">
+            <th style="padding:11px 14px;text-align:left;font-size:11px;color:#6b7280;font-weight:700;text-transform:uppercase;border-bottom:1px solid #e5e7eb">Title</th>
+            <th style="padding:11px 14px;text-align:left;font-size:11px;color:#6b7280;font-weight:700;text-transform:uppercase;border-bottom:1px solid #e5e7eb">Published</th>
+            <th style="padding:11px 14px;text-align:left;font-size:11px;color:#6b7280;font-weight:700;text-transform:uppercase;border-bottom:1px solid #e5e7eb">Status</th>
+            <th style="padding:11px 14px;border-bottom:1px solid #e5e7eb"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for post in posts %}
+          <tr style="border-bottom:1px solid #f3f4f6">
+            <td style="padding:11px 14px">
+              <div style="font-weight:600;color:#111827">{{ post.title }}</div>
+              <div style="font-size:11.5px;color:#9ca3af">{{ post.teaser|truncatechars:70 }}</div>
+            </td>
+            <td style="padding:11px 14px;color:#374151;white-space:nowrap">{{ post.published_at|date:"j M Y" }}</td>
+            <td style="padding:11px 14px">
+              {% if post.is_published %}
+                <span style="background:#d1fae5;color:#065f46;padding:3px 10px;border-radius:11px;font-size:11px;font-weight:700">Published</span>
+              {% else %}
+                <span style="background:#fef3c7;color:#92400e;padding:3px 10px;border-radius:11px;font-size:11px;font-weight:700">Draft</span>
+              {% endif %}
+            </td>
+            <td style="padding:11px 14px;white-space:nowrap;text-align:right">
+              {% if post.is_published %}
+              <a href="{{ post.get_absolute_url }}" target="_blank" style="color:#6b7280;font-size:12px;text-decoration:none;margin-right:10px">View</a>
+              {% endif %}
+              {% if can_edit %}
+              <a href="{% url 'dashboard_content:post_edit' post.pk %}" style="color:#2563eb;font-size:12px;font-weight:600;text-decoration:none;margin-right:10px">Edit</a>
+              <form method="post" action="{% url 'dashboard_content:post_delete' post.pk %}" style="display:inline"
+                    onsubmit="return confirm('Delete &quot;{{ post.title|escapejs }}&quot;? This cannot be undone.');">
+                {% csrf_token %}
+                <button type="submit" style="background:#fee2e2;color:#991b1b;border:none;border-radius:6px;padding:4px 11px;font-size:12px;cursor:pointer">Delete</button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div style="padding:46px 24px;text-align:center;color:#9ca3af">
+      <i class="bi bi-newspaper" style="font-size:32px;display:block;margin-bottom:12px"></i>
+      <strong style="color:#6b7280">No posts yet</strong>
+      <p style="font-size:13px;margin-top:6px">Write your first update about a recent trip or some news.</p>
+      {% if can_edit %}
+      <a href="{% url 'dashboard_content:post_create' %}" class="btn-green" style="text-decoration:none;display:inline-block;margin-top:12px">
+        <i class="bi bi-plus-lg me-2"></i>New post
+      </a>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{% if page_obj.has_other_pages %}
+<div style="display:flex;justify-content:center;gap:8px;margin-top:18px">
+  {% if page_obj.has_previous %}
+    <a href="?page={{ page_obj.previous_page_number }}" style="padding:7px 14px;border-radius:7px;background:#fff;border:1px solid #e5e7eb;color:#374151;font-size:13px;text-decoration:none">Previous</a>
+  {% endif %}
+  <span style="padding:7px 14px;font-size:13px;color:#6b7280">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+  {% if page_obj.has_next %}
+    <a href="?page={{ page_obj.next_page_number }}" style="padding:7px 14px;border-radius:7px;background:#fff;border:1px solid #e5e7eb;color:#374151;font-size:13px;text-decoration:none">Next</a>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

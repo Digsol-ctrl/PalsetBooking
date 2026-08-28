@@ -65,6 +65,8 @@
     <input type="hidden" id="num_adults" name="num_adults" value="1">
     <input type="hidden" id="num_kids_carried" name="num_kids_carried" value="0">
     <input type="hidden" id="luggage_count" name="luggage_count" value="0">
+    <input type="hidden" id="hand_luggage_count" name="hand_luggage_count" value="0">
+    <input type="hidden" id="stops_json" name="stops_json" value="{{ step2_data.stops_json|default:'[]' }}">
     <input type="hidden" id="baby_car_seater" name="baby_car_seater" value="0">
 
     <!-- Passengers & Luggage Section -->
@@ -116,7 +118,45 @@
                 </div>
                 <small class="form-text">Charges will be incurred from the 6th bag onwards</small>
             </div>
+
+            <!-- Hand Luggage -->
+            <div class="form-group">
+                <label class="form-label"><i class="bi bi-handbag"></i> Hand Luggage</label>
+                <div class="field-counter">
+                    <button type="button" class="btn-decrement" data-field="hand_luggage_count">&minus;</button>
+                    <input type="text" id="display_hand_luggage_count" readonly value="0" title="Number of hand luggage items">
+                    <button type="button" class="btn-increment" data-field="hand_luggage_count">+</button>
+                </div>
+                <small class="form-text">Small bags kept with you in the cabin</small>
+            </div>
         </div>
+    </div>
+
+    <!-- Stops Along The Way -->
+    <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd;">
+        <h4><i class="bi bi-signpost-split"></i> Stops Along The Way</h4>
+        <p style="font-size: 13px; color: #666; margin: 4px 0 14px;">
+            Need the driver to wait somewhere on the way? Add each stop and how long you expect it to take.
+            <strong>Each stop is charged separately.</strong>
+        </p>
+
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:#334155;">
+            {% for tier in stop_tiers %}
+                <span style="display:inline-block;margin:2px 10px 2px 0;">
+                    Up to {{ tier.max_minutes }} min:
+                    <strong>{% if tier.price > 0 %}${{ tier.price|floatformat:0 }}{% else %}Free{% endif %}</strong>
+                </span>
+            {% endfor %}
+        </div>
+
+        <div id="stops_container"></div>
+
+        <button type="button" id="add_stop_btn"
+                style="margin-top:6px;background:#f0fdf4;color:#065f46;border:1px dashed #6ee7b7;border-radius:6px;padding:8px 16px;font-size:13px;cursor:pointer;font-weight:600;">
+            <i class="bi bi-plus-lg"></i> Add a stop
+        </button>
+
+        <div id="stops_total" style="margin-top:12px;font-size:14px;font-weight:700;color:#1e3a5f;display:none;"></div>
     </div>
 
     <!-- Info Box -->
@@ -208,6 +248,7 @@
     // Render passengers
     function renderPassengers() {
         const container = document.getElementById('passengers_container');
+        if (!container) return;
         container.innerHTML = '';
         
         passengers.forEach((passenger, index) => {
@@ -304,11 +345,18 @@
     }
 
     // Field counter logic
+    // A configured limit of 0 (the default) means "no maximum".
+    const noLimit = Number.MAX_SAFE_INTEGER;
+    const maxPassengers = {{ booking_limits.MAX_PASSENGERS|default:0 }} || noLimit;
+    const maxLuggage = {{ booking_limits.MAX_LUGGAGE|default:0 }} || noLimit;
+    const maxHandLuggage = {{ booking_limits.MAX_HAND_LUGGAGE|default:0 }} || noLimit;
+
     const fields = {
-        num_adults: { min: 1, max: 10, initial: 1 },
-        baby_car_seater: { min: 0, max: 5, initial: 0 },
-        num_kids_carried: { min: 0, max: 5, initial: 0 },
-        luggage_count: { min: 0, max: 10, initial: 0 },
+        num_adults: { min: 1, max: maxPassengers, initial: 1 },
+        baby_car_seater: { min: 0, max: noLimit, initial: 0 },
+        num_kids_carried: { min: 0, max: noLimit, initial: 0 },
+        luggage_count: { min: 0, max: maxLuggage, initial: 0 },
+        hand_luggage_count: { min: 0, max: maxHandLuggage, initial: 0 },
     };
 
     // Initialize from form values or defaults
@@ -356,6 +404,107 @@
     });
 
 
+    // --- Stops along the way ------------------------------------------------
+    // Each stop is priced independently from the bands configured in the dashboard.
+    const STOP_TIERS = [
+        {% for tier in stop_tiers %}{ maxMinutes: {{ tier.max_minutes }}, price: {{ tier.price }} }{% if not forloop.last %}, {% endif %}{% endfor %}
+    ];
+    let stops = [];
+
+    function feeForMinutes(minutes) {
+        for (const tier of STOP_TIERS) {
+            if (minutes <= tier.maxMinutes) return tier.price;
+        }
+        return STOP_TIERS.length ? STOP_TIERS[STOP_TIERS.length - 1].price : 0;
+    }
+
+    function stopOptions(selected) {
+        return STOP_TIERS.map(tier => {
+            const label = tier.price > 0
+                ? 'Up to ' + tier.maxMinutes + ' minutes \u2014 $' + tier.price
+                : 'Up to ' + tier.maxMinutes + ' minutes \u2014 Free';
+            const isSelected = Number(selected) === tier.maxMinutes ? 'selected' : '';
+            return '<option value="' + tier.maxMinutes + '" ' + isSelected + '>' + label + '</option>';
+        }).join('');
+    }
+
+    function escapeAttr(value) {
+        return String(value || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    }
+
+    function renderStops() {
+        const container = document.getElementById('stops_container');
+        if (!container) return;
+        container.innerHTML = '';
+
+        stops.forEach((stop, index) => {
+            const row = document.createElement('div');
+            row.style.cssText = 'background:#f8f9fa;border-left:4px solid #1e3a5f;border-radius:6px;padding:12px 14px;margin-bottom:10px;position:relative;';
+            row.innerHTML =
+                '<div style="display:grid;grid-template-columns:1fr 220px;gap:10px;align-items:end;">' +
+                    '<div>' +
+                        '<label style="display:block;font-size:12px;font-weight:600;color:#475569;margin-bottom:4px;">Stop ' + (index + 1) + ' &mdash; where?</label>' +
+                        '<input type="text" class="form-control stop-desc" data-index="' + index + '" ' +
+                               'placeholder="e.g. Pick up a parcel in Belgravia" value="' + escapeAttr(stop.description) + '">' +
+                    '</div>' +
+                    '<div>' +
+                        '<label style="display:block;font-size:12px;font-weight:600;color:#475569;margin-bottom:4px;">How long?</label>' +
+                        '<select class="form-control stop-minutes" data-index="' + index + '">' + stopOptions(stop.minutes) + '</select>' +
+                    '</div>' +
+                '</div>' +
+                '<button type="button" class="stop-remove" data-index="' + index + '" ' +
+                        'style="position:absolute;top:8px;right:8px;background:#fee2e2;color:#991b1b;border:none;border-radius:4px;padding:3px 9px;font-size:11px;cursor:pointer;">Remove</button>';
+            container.appendChild(row);
+        });
+
+        container.querySelectorAll('.stop-desc').forEach(el => {
+            el.addEventListener('input', () => { stops[el.dataset.index].description = el.value; syncStops(); });
+        });
+        container.querySelectorAll('.stop-minutes').forEach(el => {
+            el.addEventListener('change', () => { stops[el.dataset.index].minutes = parseInt(el.value, 10) || 0; syncStops(); });
+        });
+        container.querySelectorAll('.stop-remove').forEach(el => {
+            el.addEventListener('click', () => { stops.splice(Number(el.dataset.index), 1); renderStops(); });
+        });
+
+        syncStops();
+    }
+
+    function syncStops() {
+        const field = document.getElementById('stops_json');
+        if (field) field.value = JSON.stringify(stops);
+
+        const totalBox = document.getElementById('stops_total');
+        if (!totalBox) return;
+        if (!stops.length) {
+            totalBox.style.display = 'none';
+            return;
+        }
+        const total = stops.reduce((sum, s) => sum + feeForMinutes(s.minutes), 0);
+        totalBox.style.display = 'block';
+        totalBox.textContent = stops.length + ' stop' + (stops.length > 1 ? 's' : '') + ' \u2014 $' + total.toFixed(2) + ' added to your fare';
+    }
+
+    function initializeStops() {
+        const field = document.getElementById('stops_json');
+        if (field && field.value) {
+            try {
+                const parsed = JSON.parse(field.value);
+                if (Array.isArray(parsed)) stops = parsed;
+            } catch (e) { stops = []; }
+        }
+        renderStops();
+    }
+
+    const addStopBtn = document.getElementById('add_stop_btn');
+    if (addStopBtn) {
+        addStopBtn.addEventListener('click', () => {
+            const firstTier = STOP_TIERS.length ? STOP_TIERS[0].maxMinutes : 10;
+            stops.push({ description: '', minutes: firstTier });
+            renderStops();
+        });
+    }
+
     // Back button
     document.getElementById('prev_btn').addEventListener('click', (e) => {
         e.preventDefault();
@@ -366,6 +515,7 @@
     window.addEventListener('load', () => {
         initializeCounters();
         initializePassengers();
+        initializeStops();
     });
 </script>
 {% endblock %}

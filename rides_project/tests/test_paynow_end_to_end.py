@@ -1,5 +1,7 @@
+from datetime import timedelta
 from django.test import TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 from rides.models import RideBooking, Payment
 from rides.services.paynow import PaynowService
 from unittest.mock import patch
@@ -23,6 +25,9 @@ class PaynowEndToEndTest(TestCase):
             'phone': '0771111111',
             'email': 'mufambisitendaiblessed@gmail.com',
             'payment_option': 'PAYNOW',
+            'passenger_full_name': 'Test Passenger',
+            'pickup_date': (timezone.localtime() + timedelta(days=2)).date().isoformat(),
+            'pickup_time': '10:00',
         }
 
     def test_booking_then_webhook_marks_paid(self):
@@ -151,8 +156,9 @@ class PaynowEndToEndTest(TestCase):
         # Many payments with null paynow_reference should not cause a 500 when return is hit without reference
         b = RideBooking.objects.create(pickup_address='a', dropoff_address='b', distance_km=1.0, phone='077', email='x@y.com', payment_option=RideBooking.PAYMENT_PAYNOW, price_breakdown={}, total_amount=10.0)
         # Create many payments without paynow_reference
+        payment = None
         for i in range(5):
-            Payment.objects.create(booking=b, method='PAYNOW', amount=10.0, status=Payment.STATUS_PENDING)
+            payment = Payment.objects.create(booking=b, method='PAYNOW', amount=10.0, status=Payment.STATUS_PENDING)
 
         # No reference param
         resp = self.client.get(reverse('rides:paynow_return'))
