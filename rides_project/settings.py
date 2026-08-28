@@ -7,6 +7,12 @@ load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 BASE_URL = os.getenv("BASE_URL", "https://booking.easytransit.co.zw")
+# The main marketing site. Blog and gallery visitors arrive from there, so the
+# public pages link back to it rather than trapping people on the subdomain.
+MAIN_SITE_URL = os.getenv("MAIN_SITE_URL", "https://easytransit.co.zw")
+# The main marketing site. Blog and gallery visitors arrive from there, so the
+# public pages link back to it rather than trapping people on the subdomain.
+MAIN_SITE_URL = os.getenv("MAIN_SITE_URL", "https://easytransit.co.zw")
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "change-me-in-production")
 
 #DEBUG = os.getenv("DJANGO_DEBUG", "True") == "True"
@@ -70,6 +76,7 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
                 "rides.dashboard_views.dashboard_context_processor",
+                "content.context_processors.main_site",
             ],
         },
     },

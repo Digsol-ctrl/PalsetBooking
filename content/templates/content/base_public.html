@@ -75,8 +75,9 @@
 
 <header class="site-header">
     <div class="inner">
-        <a href="/" class="brand"><i class="bi bi-car-front-fill"></i> Easy Transit</a>
+        <a href="{{ MAIN_SITE_URL }}" class="brand"><i class="bi bi-car-front-fill"></i> Easy Transit</a>
         <nav class="site-nav">
+            <a href="{{ MAIN_SITE_URL }}"><i class="bi bi-house"></i> Main site</a>
             <a href="{% url 'content:blog_list' %}" class="{% if section == 'blog' %}active{% endif %}">News</a>
             <a href="{% url 'content:gallery' %}" class="{% if section == 'gallery' %}active{% endif %}">Gallery</a>
             <a href="/" class="cta"><i class="bi bi-calendar-check"></i> Book a ride</a>
@@ -89,7 +90,10 @@
 </main>
 
 <footer class="site-footer">
-    <p>Easy Transit &middot; <a href="mailto:enquiries@easytransit.co.zw">enquiries@easytransit.co.zw</a></p>
+    <p>
+        <a href="{{ MAIN_SITE_URL }}">easytransit.co.zw</a> &middot;
+        <a href="mailto:enquiries@easytransit.co.zw">enquiries@easytransit.co.zw</a>
+    </p>
 </footer>
 
 </body>
