@@ -17,8 +17,8 @@ DEFAULT_PRICING = {
     "EXTRA_ADULT_FEE": 10.0,
     "FREE_LUGGAGE_ITEMS": 5,
     "LUGGAGE_FEE": 5.0,
-    "HAND_LUGGAGE_FREE_ITEMS": 1,
-    "HAND_LUGGAGE_FEE": 0.0,
+    "HAND_LUGGAGE_FREE_ITEMS": 5,
+    "HAND_LUGGAGE_FEE": 1.50,
 }
 
 DEFAULT_LONG_DISTANCE = {
@@ -28,8 +28,8 @@ DEFAULT_LONG_DISTANCE = {
     "EXTRA_PAX_FEE": 40.0,
     "FREE_LUGGAGE_ITEMS": 5,
     "LUGGAGE_FEE": 5.0,
-    "HAND_LUGGAGE_FREE_ITEMS": 1,
-    "HAND_LUGGAGE_FEE": 0.0,
+    "HAND_LUGGAGE_FREE_ITEMS": 5,
+    "HAND_LUGGAGE_FEE": 1.50,
 }
 
 DEFAULT_NIGHT = {
@@ -91,7 +91,12 @@ def _get_self_service_cfg():
         from rides.models import SiteSettings
         return SiteSettings.get_settings().get_self_service_cfg()
     except Exception:
-        return {"ALLOW_RESCHEDULE": True, "ALLOW_CANCELLATION": True, "CUTOFF_HOURS": 12}
+        return {
+            "ALLOW_RESCHEDULE": True,
+            "ALLOW_CANCELLATION": True,
+            "ALLOW_FLIGHT_UPDATE": True,
+            "CUTOFF_HOURS": 12,
+        }
 
 
 def _get_stop_tiers():
@@ -179,14 +184,78 @@ class PricingService:
             return Decimal("0.00")
 
     @classmethod
+    def city_base_price(cls, distance_km) -> Decimal:
+        """Distance component of a city fare, from the configured brackets."""
+        try:
+            distance = Decimal(str(float(distance_km)))
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Invalid distance_km: {exc}") from exc
+
+        pricing_cfg = _get_pricing_cfg() or {}
+        brackets = pricing_cfg.get("BRACKETS") or DEFAULT_PRICING["BRACKETS"]
+        try:
+            sorted_brackets = sorted(brackets, key=lambda b: float(b.get('min', 0)))
+        except Exception:
+            sorted_brackets = list(brackets)
+
+        # Enforce minimum chargeable distance
+        min_km = Decimal(str(pricing_cfg.get("MIN_DISTANCE_KM", DEFAULT_PRICING["MIN_DISTANCE_KM"])))
+        effective_distance = max(distance, min_km)
+
+        base_price = None
+
+        # 1. Try exact bracket match (min <= distance <= max)
+        for bracket in sorted_brackets:
+            try:
+                if Decimal(str(bracket.get("min"))) <= effective_distance <= Decimal(str(bracket.get("max"))):
+                    base_price = Decimal(str(bracket.get("price")))
+                    break
+            except Exception:
+                logger.exception('Malformed pricing bracket: %s', bracket)
+
+        if base_price is None and sorted_brackets:
+            last_bracket = sorted_brackets[-1]
+            last_max = Decimal(str(last_bracket.get('max', 0)))
+            last_price = Decimal(str(last_bracket.get('price', 0)))
+
+            if effective_distance > last_max:
+                # 2. Above all brackets — per-km rate above the last bracket's max
+                per_km = Decimal(str(pricing_cfg.get("ABOVE_35_PER_KM", DEFAULT_PRICING["ABOVE_35_PER_KM"])))
+                extra_km = effective_distance - last_max
+                base_price = last_price + (per_km * extra_km)
+            else:
+                # 3. Distance is in a gap between brackets (e.g. 20.6 km between a 17–20 and 21–25
+                #    bracket) or below the first bracket's min.
+                #    Use the highest bracket whose max < effective_distance (the lower tier).
+                best = None
+                for b in sorted_brackets:
+                    try:
+                        if Decimal(str(b.get('max', 0))) < effective_distance:
+                            best = b
+                    except Exception:
+                        pass
+                if best:
+                    base_price = Decimal(str(best.get('price', 0)))
+                else:
+                    # Below all brackets — use first bracket price as the floor
+                    base_price = Decimal(str(sorted_brackets[0].get('price', 0)))
+
+        if base_price is None:
+            base_price = Decimal(str(DEFAULT_PRICING["BRACKETS"][0]["price"]))
+
+        return base_price, effective_distance
+
+    @classmethod
     def return_leg_fee(cls, one_way_core: Decimal) -> Decimal:
         """Cost of the return leg, given the one-way fare for the same people and bags.
 
-        The journey back carries the same distance, passengers and luggage, so it is
-        charged like the outbound leg, less any configured round-trip discount.
-        Stops and night surcharges are handled separately by the caller — stops are
-        one-off and priced once, and each leg is checked against the night window
-        on its own departure time.
+        The journey back carries the same passengers and luggage, so it is charged
+        like the outbound leg, less any configured round-trip discount. When the
+        return runs a different route (collected from somewhere other than where we
+        dropped them), the caller passes a core built from the return distance
+        instead. Stops and night surcharges are handled separately by the caller —
+        stops are one-off and priced once, and each leg is checked against the night
+        window on its own departure time.
         """
         try:
             discount = Decimal(str(_get_return_discount()))
@@ -265,7 +334,7 @@ class PricingService:
         return priced, cls._round(total)
 
     @classmethod
-    def calculate(cls, distance_km: float, num_adults: int = 1, num_kids_seated: int = 0, baby_car_seater: int = 0, num_kids_carried: int = 0, luggage_count: int = 0, hand_luggage_count: int = 0, pickup_time=None, stops=None, is_return_trip: bool = False, return_time=None) -> dict:
+    def calculate(cls, distance_km: float, num_adults: int = 1, num_kids_seated: int = 0, baby_car_seater: int = 0, num_kids_carried: int = 0, luggage_count: int = 0, hand_luggage_count: int = 0, pickup_time=None, stops=None, is_return_trip: bool = False, return_time=None, return_distance_km=None) -> dict:
         # Coerce and validate inputs to avoid type errors caused by session/JSON strings
         try:
             if distance_km is None:
@@ -295,57 +364,7 @@ class PricingService:
 
         pricing_cfg = _get_pricing_cfg() or {}
 
-        # Use configured brackets or defaults, sorted by min ascending
-        brackets = pricing_cfg.get("BRACKETS") or DEFAULT_PRICING["BRACKETS"]
-        try:
-            sorted_brackets = sorted(brackets, key=lambda b: float(b.get('min', 0)))
-        except Exception:
-            sorted_brackets = list(brackets)
-
-        # Enforce minimum chargeable distance
-        min_km = Decimal(str(pricing_cfg.get("MIN_DISTANCE_KM", DEFAULT_PRICING["MIN_DISTANCE_KM"])))
-        effective_distance = max(distance, min_km)
-
-        base_price = None
-
-        # 1. Try exact bracket match (min <= distance <= max)
-        for bracket in sorted_brackets:
-            try:
-                if Decimal(str(bracket.get("min"))) <= effective_distance <= Decimal(str(bracket.get("max"))):
-                    base_price = Decimal(str(bracket.get("price")))
-                    break
-            except Exception:
-                logger.exception('Malformed pricing bracket: %s', bracket)
-
-        if base_price is None and sorted_brackets:
-            last_bracket = sorted_brackets[-1]
-            last_max = Decimal(str(last_bracket.get('max', 0)))
-            last_price = Decimal(str(last_bracket.get('price', 0)))
-
-            if effective_distance > last_max:
-                # 2. Above all brackets — per-km rate above the last bracket's max
-                per_km = Decimal(str(pricing_cfg.get("ABOVE_35_PER_KM", DEFAULT_PRICING["ABOVE_35_PER_KM"])))
-                extra_km = effective_distance - last_max
-                base_price = last_price + (per_km * extra_km)
-            else:
-                # 3. Distance is in a gap between brackets (e.g. 20.6 km between a 17–20 and 21–25
-                #    bracket) or below the first bracket's min.
-                #    Use the highest bracket whose max < effective_distance (the lower tier).
-                best = None
-                for b in sorted_brackets:
-                    try:
-                        if Decimal(str(b.get('max', 0))) < effective_distance:
-                            best = b
-                    except Exception:
-                        pass
-                if best:
-                    base_price = Decimal(str(best.get('price', 0)))
-                else:
-                    # Below all brackets — use first bracket price as the floor
-                    base_price = Decimal(str(sorted_brackets[0].get('price', 0)))
-
-        if base_price is None:
-            base_price = Decimal(str(DEFAULT_PRICING["BRACKETS"][0]["price"]))
+        base_price, effective_distance = cls.city_base_price(distance)
 
         # Extra adults
         base_passengers = int(pricing_cfg.get("BASE_PASSENGERS", DEFAULT_PRICING["BASE_PASSENGERS"]))
@@ -375,8 +394,26 @@ class PricingService:
         # Stops along the way — charged per stop, once (not doubled on a return trip)
         priced_stops, stops_fee = cls.price_stops(stops)
 
-        # Return leg, if the customer booked a round trip
-        return_leg = cls.return_leg_fee(one_way_core) if is_return_trip else Decimal("0.00")
+        # Return leg, if the customer booked a round trip. A return that runs its own
+        # route (different pickup or dropoff) is measured and charged on that route;
+        # otherwise it mirrors the outbound leg.
+        return_core = one_way_core
+        return_base_price = base_price
+        return_distance = None
+        if is_return_trip:
+            try:
+                if return_distance_km is not None and float(return_distance_km) > 0:
+                    return_distance = Decimal(str(float(return_distance_km)))
+            except (TypeError, ValueError):
+                return_distance = None
+            if return_distance is not None:
+                return_base_price, _ = cls.city_base_price(return_distance)
+                return_core = (
+                    return_base_price + extra_adults_fee + baby_car_seater_fee
+                    + luggage_fee + hand_luggage_fee
+                )
+
+        return_leg = cls.return_leg_fee(return_core) if is_return_trip else Decimal("0.00")
         return_night_surcharge = cls.night_surcharge_for(return_time) if is_return_trip else Decimal("0.00")
 
         # Sum up
@@ -412,6 +449,9 @@ class PricingService:
             "one_way_total": float(cls._round(one_way_core + night_surcharge + stops_fee)),
             "is_return_trip": bool(is_return_trip),
             "return_leg_fee": float(cls._round(return_leg)),
+            "return_distance_km": float(return_distance) if return_distance is not None else None,
+            "return_base_distance_price": float(cls._round(return_base_price)) if is_return_trip else 0,
+            "return_uses_own_route": bool(return_distance is not None),
             "return_discount_percent": cls.get_return_discount_percent() if is_return_trip else 0,
             "is_night_return": bool(return_night_surcharge > 0),
             "return_night_surcharge": float(cls._round(return_night_surcharge)),
@@ -431,7 +471,7 @@ class PricingService:
         return float(distance_km) >= cls._get_ld_threshold()
 
     @classmethod
-    def calculate_long_distance(cls, distance_km: float, num_adults: int = 1, luggage_count: int = 0, hand_luggage_count: int = 0, pickup_time=None, stops=None, is_return_trip: bool = False, return_time=None) -> dict:
+    def calculate_long_distance(cls, distance_km: float, num_adults: int = 1, luggage_count: int = 0, hand_luggage_count: int = 0, pickup_time=None, stops=None, is_return_trip: bool = False, return_time=None, return_distance_km=None) -> dict:
         try:
             distance = Decimal(str(float(distance_km)))
         except (TypeError, ValueError) as exc:
@@ -474,7 +514,21 @@ class PricingService:
         night_surcharge = cls.night_surcharge_for(pickup_time)
         priced_stops, stops_fee = cls.price_stops(stops)
 
-        return_leg = cls.return_leg_fee(one_way_core) if is_return_trip else Decimal("0.00")
+        # A return leg on its own route is measured at the same per-km rate.
+        return_core = one_way_core
+        return_base_price = base_price
+        return_distance = None
+        if is_return_trip:
+            try:
+                if return_distance_km is not None and float(return_distance_km) > 0:
+                    return_distance = Decimal(str(float(return_distance_km)))
+            except (TypeError, ValueError):
+                return_distance = None
+            if return_distance is not None:
+                return_base_price = cls._round(per_km * return_distance)
+                return_core = return_base_price + extra_pax_fee + luggage_fee + hand_luggage_fee
+
+        return_leg = cls.return_leg_fee(return_core) if is_return_trip else Decimal("0.00")
         return_night_surcharge = cls.night_surcharge_for(return_time) if is_return_trip else Decimal("0.00")
 
         total = cls._round(
@@ -506,6 +560,9 @@ class PricingService:
             "one_way_total": float(cls._round(one_way_core + night_surcharge + stops_fee)),
             "is_return_trip": bool(is_return_trip),
             "return_leg_fee": float(return_leg),
+            "return_distance_km": float(return_distance) if return_distance is not None else None,
+            "return_base_distance_price": float(return_base_price) if is_return_trip else 0,
+            "return_uses_own_route": bool(return_distance is not None),
             "return_discount_percent": cls.get_return_discount_percent() if is_return_trip else 0,
             "is_night_return": bool(return_night_surcharge > 0),
             "return_night_surcharge": float(return_night_surcharge),
@@ -554,6 +611,29 @@ class PricingService:
             return SiteSettings.get_settings().get_limits_cfg()
         except Exception:
             return {"MAX_PASSENGERS": 0, "MAX_LUGGAGE": 0, "MAX_HAND_LUGGAGE": 0}
+
+    @classmethod
+    def get_airport_terminals(cls) -> list:
+        """Pickup points offered for an airport pickup (international side, etc.)."""
+        try:
+            from rides.models import SiteSettings
+            return SiteSettings.get_settings().get_airport_terminals()
+        except Exception:
+            return [
+                'International Arrivals',
+                'Domestic Arrivals',
+                'Departures / Drop-off',
+                'Private & Charter Terminal',
+            ]
+
+    @classmethod
+    def get_hand_luggage_cfg(cls) -> dict:
+        """Free hand luggage allowance and the per-item charge beyond it."""
+        try:
+            from rides.models import SiteSettings
+            return SiteSettings.get_settings().get_hand_luggage_cfg()
+        except Exception:
+            return {"FREE_ITEMS": 5, "FEE": 1.50}
 
     @classmethod
     def get_paynow_rule(cls) -> dict:

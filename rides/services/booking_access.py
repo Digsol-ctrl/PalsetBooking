@@ -77,16 +77,24 @@ def self_service_state(booking):
     cfg = _get_self_service_cfg()
     cutoff_hours = int(cfg.get('CUTOFF_HOURS', 12))
 
+    # Flight corrections are treated separately from a reschedule: an airline can
+    # move a passenger hours before landing, and the driver still has to meet the
+    # right flight, so the cut-off below does not apply to them.
+    allow_flight_update = bool(cfg.get('ALLOW_FLIGHT_UPDATE', True)) and bool(booking.pickup_is_airport)
+
     state = {
         'cutoff_hours': cutoff_hours,
         'can_reschedule': bool(cfg.get('ALLOW_RESCHEDULE', True)),
         'can_cancel': bool(cfg.get('ALLOW_CANCELLATION', True)),
+        'can_update_flight': allow_flight_update,
         'blocked_reason': '',
+        'flight_blocked_reason': '',
     }
 
     if booking.status == RideBooking.STATUS_CANCELLED:
-        state.update(can_reschedule=False, can_cancel=False,
-                     blocked_reason='This booking has already been cancelled.')
+        state.update(can_reschedule=False, can_cancel=False, can_update_flight=False,
+                     blocked_reason='This booking has already been cancelled.',
+                     flight_blocked_reason='This booking has already been cancelled.')
         return state
 
     scheduled = scheduled_datetime(booking)
@@ -96,8 +104,9 @@ def self_service_state(booking):
     now = timezone.localtime() if timezone.is_aware(scheduled) else datetime.now()
 
     if scheduled <= now:
-        state.update(can_reschedule=False, can_cancel=False,
-                     blocked_reason='This trip has already taken place.')
+        state.update(can_reschedule=False, can_cancel=False, can_update_flight=False,
+                     blocked_reason='This trip has already taken place.',
+                     flight_blocked_reason='This trip has already taken place.')
         return state
 
     if cutoff_hours and scheduled - timedelta(hours=cutoff_hours) <= now:

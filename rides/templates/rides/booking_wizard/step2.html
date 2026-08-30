@@ -127,7 +127,13 @@
                     <input type="text" id="display_hand_luggage_count" readonly value="0" title="Number of hand luggage items">
                     <button type="button" class="btn-increment" data-field="hand_luggage_count">+</button>
                 </div>
-                <small class="form-text">Small bags kept with you in the cabin</small>
+                <small class="form-text">
+                    Small bags kept with you in the cabin.
+                    {% if hand_luggage_cfg.FEE > 0 %}
+                        First {{ hand_luggage_cfg.FREE_ITEMS }} free, then ${{ hand_luggage_cfg.FEE|floatformat:2 }} each &mdash;
+                        past that they take boot space like a suitcase.
+                    {% endif %}
+                </small>
             </div>
         </div>
     </div>

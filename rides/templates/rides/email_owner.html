@@ -34,13 +34,18 @@
         <table>
           <tr><td>Passenger</td><td>{% if booking.passenger_full_name %}{{ booking.salutation }} {{ booking.passenger_full_name }}{% else %}{{ booking.num_adults }} adult(s){% endif %}</td></tr>
           <tr><td>Phone / Email</td><td>{{ booking.phone }} / {{ booking.email }}</td></tr>
-          <tr><td>Pickup</td><td>{{ booking.pickup_address }}</td></tr>
+          <tr><td>Pickup</td><td>{{ booking.pickup_display }}</td></tr>
           <tr><td>Pickup date/time</td><td>{% if booking.pickup_date %}{{ booking.pickup_date }}{% endif %}{% if booking.pickup_time %} {{ booking.pickup_time }}{% endif %}</td></tr>
           <tr><td>Airport pickup</td><td>{% if booking.pickup_is_airport %}Yes{% else %}No{% endif %}</td></tr>
           {% if booking.pickup_is_airport %}
           <tr><td>Arrival flight</td><td>{{ booking.arrival_airline }} {{ booking.arrival_flight_number }} on {% if booking.arrival_date %}{{ booking.arrival_date }}{% endif %}{% if booking.arrival_time %} {{ booking.arrival_time }}{% endif %}</td></tr>
+          {% if booking.pickup_airport_terminal %}<tr><td>Collection point</td><td>{{ booking.pickup_airport_terminal }}</td></tr>{% endif %}
+          {% if booking.flight_departure_airport %}<tr><td>Departing from</td><td>{{ booking.flight_departure_airport }}</td></tr>{% endif %}
+          {% if booking.flight_connection_details %}<tr><td>Connection</td><td>{{ booking.flight_connection_details }}</td></tr>{% endif %}
+          {% if booking.flight_notes %}<tr><td>Flight notes</td><td>{{ booking.flight_notes }}</td></tr>{% endif %}
+          {% if booking.flight_details_updated_at %}<tr><td>Flight last updated</td><td>{{ booking.flight_details_updated_at }} (by the customer)</td></tr>{% endif %}
           {% endif %}
-          <tr><td>Dropoff</td><td>{{ booking.dropoff_address }}</td></tr>
+          <tr><td>Dropoff</td><td>{{ booking.dropoff_display }}</td></tr>
           <tr><td>Distance</td><td>{{ booking.distance_km }} km</td></tr>
           <tr><td>Passengers</td><td>{{ booking.num_adults }} seated{% if booking.num_kids_carried %}, {{ booking.num_kids_carried }} kid(s) carried{% endif %}</td></tr>
           {% if booking.baby_car_seater %}<tr><td>Baby car seats</td><td>{{ booking.baby_car_seater }}</td></tr>{% endif %}
@@ -48,6 +53,11 @@
           <tr><td>Hand luggage</td><td>{{ booking.hand_luggage_count }}</td></tr>
           {% if booking.is_return_trip %}
           <tr><td>Return trip</td><td>{{ booking.return_date }} at {{ booking.return_time }}</td></tr>
+          {% if booking.return_uses_different_points %}
+          <tr><td>Return pickup</td><td>{{ booking.return_pickup_display }}</td></tr>
+          <tr><td>Return dropoff</td><td>{{ booking.return_dropoff_display }}</td></tr>
+          {% if booking.return_distance_km %}<tr><td>Return distance</td><td>{{ booking.return_distance_km }} km</td></tr>{% endif %}
+          {% endif %}
           {% if booking.price_breakdown.return_leg_fee %}
           <tr><td>Return leg fare</td><td>${{ booking.price_breakdown.return_leg_fee|floatformat:2 }}</td></tr>
           {% endif %}

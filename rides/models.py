@@ -38,6 +38,12 @@ class RideBooking(models.Model):
     dropoff_lat = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     dropoff_lng = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
 
+    # Exactly where at that address the driver meets the passenger. A place name
+    # like "Harare International Airport" or "Avondale Shops" covers a lot of
+    # ground, so the customer pins the meeting point in their own words.
+    pickup_point_detail = models.CharField(max_length=256, blank=True, default='')
+    dropoff_point_detail = models.CharField(max_length=256, blank=True, default='')
+
     distance_km = models.DecimalField(max_digits=8, decimal_places=2, validators=[MinValueValidator(0)])
 
     num_adults = models.PositiveSmallIntegerField(default=1)
@@ -55,6 +61,24 @@ class RideBooking(models.Model):
     return_date = models.DateField(null=True, blank=True)
     return_time = models.TimeField(null=True, blank=True)
 
+    # The way back does not have to retrace the way out — we may have dropped the
+    # passenger in one place and be collecting them from another. When these are
+    # blank the return leg simply reverses the outbound trip.
+    return_uses_different_points = models.BooleanField(default=False)
+    return_pickup_address = models.CharField(max_length=512, blank=True, default='')
+    return_pickup_lat = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    return_pickup_lng = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    return_pickup_point_detail = models.CharField(max_length=256, blank=True, default='')
+    return_dropoff_address = models.CharField(max_length=512, blank=True, default='')
+    return_dropoff_lat = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    return_dropoff_lng = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    return_dropoff_point_detail = models.CharField(max_length=256, blank=True, default='')
+    return_distance_km = models.DecimalField(
+        max_digits=8, decimal_places=2, null=True, blank=True,
+        validators=[MinValueValidator(0)],
+        help_text='Distance of the return leg when it runs a different route from the outbound trip.'
+    )
+
     phone = models.CharField(max_length=32)
     email = models.EmailField()
     extra_instructions = models.TextField(max_length=500, blank=True, null=True, default="")
@@ -66,10 +90,20 @@ class RideBooking(models.Model):
 
     # Airport / flight details (optional; required only for airport pickups)
     pickup_is_airport = models.BooleanField(default=False)
+    # Which side of the airport — international arrivals, domestic arrivals, etc.
+    pickup_airport_terminal = models.CharField(max_length=64, blank=True, default='')
     arrival_airline = models.CharField(max_length=64, null=True, blank=True)
     arrival_flight_number = models.CharField(max_length=32, null=True, blank=True)
     arrival_date = models.DateField(null=True, blank=True)
     arrival_time = models.TimeField(null=True, blank=True)
+
+    # Extra flight context. Passengers often rebook mid-journey (e.g. they change
+    # flight while connecting through Johannesburg), so these can be filled in at
+    # booking time and corrected later from the customer's own booking link.
+    flight_departure_airport = models.CharField(max_length=128, blank=True, default='')
+    flight_connection_details = models.CharField(max_length=256, blank=True, default='')
+    flight_notes = models.TextField(max_length=500, blank=True, default='')
+    flight_details_updated_at = models.DateTimeField(null=True, blank=True)
 
     # Passenger identity / salutation
     salutation = models.CharField(max_length=32, null=True, blank=True)
@@ -113,6 +147,42 @@ class RideBooking(models.Model):
 
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
+
+    @property
+    def pickup_display(self):
+        """Pickup address with the terminal and meeting point the customer gave."""
+        return self._place_display(self.pickup_address, self.pickup_airport_terminal, self.pickup_point_detail)
+
+    @property
+    def dropoff_display(self):
+        return self._place_display(self.dropoff_address, '', self.dropoff_point_detail)
+
+    @property
+    def return_pickup_display(self):
+        """Where the return leg starts — the stated point, or the outbound dropoff."""
+        if self.return_uses_different_points and self.return_pickup_address:
+            return self._place_display(self.return_pickup_address, '', self.return_pickup_point_detail)
+        return self.dropoff_display
+
+    @property
+    def return_dropoff_display(self):
+        """Where the return leg ends — the stated point, or back to the outbound pickup."""
+        if self.return_uses_different_points and self.return_dropoff_address:
+            return self._place_display(self.return_dropoff_address, '', self.return_dropoff_point_detail)
+        return self.pickup_display
+
+    @staticmethod
+    def _place_display(address, terminal='', detail=''):
+        parts = [p for p in (address, terminal, detail) if p and str(p).strip()]
+        return ' — '.join(str(p).strip() for p in parts)
+
+    @property
+    def has_flight_details(self):
+        return bool(
+            self.arrival_airline or self.arrival_flight_number
+            or self.flight_departure_airport or self.flight_connection_details
+            or self.flight_notes
+        )
 
     def log_change(self, action: str, detail: str = ''):
         """Append an entry to the customer-facing change history."""
@@ -239,13 +309,31 @@ class SiteSettings(models.Model):
         )
     )
 
-    # Hand luggage (applies to both city and long distance)
+    # Hand luggage (applies to both city and long distance). Small bags are free
+    # up to the allowance; beyond that they take real boot space and are charged.
     hand_luggage_free = models.PositiveSmallIntegerField(
-        default=1, help_text='Hand luggage items included free per booking.'
+        default=5, help_text='Hand luggage items included free per booking.'
     )
     hand_luggage_fee = models.DecimalField(
-        max_digits=6, decimal_places=2, default=0.00,
+        max_digits=6, decimal_places=2, default=1.50,
         help_text='Charge per hand luggage item beyond the free allowance. 0 = hand luggage always free.'
+    )
+
+    # Airport pickups: which side of the airport the driver waits at.
+    airport_terminals = JSONField(
+        default=list,
+        help_text=(
+            'Pickup points offered when a customer ticks "pickup is from an airport", '
+            'as a list of labels, e.g. ["International Arrivals", "Domestic Arrivals"].'
+        )
+    )
+
+    allow_customer_flight_update = models.BooleanField(
+        default=True,
+        help_text=(
+            'Let customers correct their flight details from the emailed link. '
+            'Allowed right up to the pickup, since flights are often changed in transit.'
+        )
     )
 
     # Booking limits (0 = no limit)
@@ -330,8 +418,19 @@ class SiteSettings(models.Model):
         return {
             "ALLOW_RESCHEDULE": bool(self.allow_customer_reschedule),
             "ALLOW_CANCELLATION": bool(self.allow_customer_cancellation),
+            "ALLOW_FLIGHT_UPDATE": bool(self.allow_customer_flight_update),
             "CUTOFF_HOURS": int(self.booking_change_cutoff_hours or 0),
         }
+
+    def get_airport_terminals(self):
+        default = [
+            'International Arrivals',
+            'Domestic Arrivals',
+            'Departures / Drop-off',
+            'Private & Charter Terminal',
+        ]
+        terminals = [str(t).strip() for t in (self.airport_terminals or []) if str(t).strip()]
+        return terminals or default
 
     def get_return_discount(self):
         """Return leg discount as a fraction between 0 and 1."""

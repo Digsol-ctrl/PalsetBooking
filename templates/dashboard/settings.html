@@ -213,6 +213,18 @@
             Let customers cancel their booking
           </label>
         </div>
+        <div class="mb-3">
+          <label style="font-size:13px;font-weight:600;color:#374151;display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" name="allow_customer_flight_update" value="1"
+                   {% if site_settings.allow_customer_flight_update %}checked{% endif %}
+                   style="width:16px;height:16px;cursor:pointer">
+            Let customers correct their flight details
+          </label>
+          <div style="font-size:11px;color:#9ca3af;margin-top:4px;margin-left:24px">
+            Airlines rebook people in transit, so this stays open right up to the pickup &mdash; the
+            cut-off below does not apply to it. The pickup follows the new arrival time.
+          </div>
+        </div>
 
         <div class="row g-3 mb-3">
           <div class="col-sm-6">
@@ -334,6 +346,49 @@
     </div>
   </div>
 
+  <!-- Airport Collection Points -->
+  <div class="dash-card mb-3">
+    <div class="dash-card-header">
+      <i class="bi bi-airplane-fill me-2" style="color:#f59e0b"></i>Airport Collection Points
+    </div>
+    <div class="dash-card-body">
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="form_type" value="airport_terminals">
+
+        <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 14px;font-size:12px;color:#1e40af;margin-bottom:14px">
+          <i class="bi bi-info-circle me-2"></i>
+          &ldquo;Harare International Airport&rdquo; on its own doesn&rsquo;t say whether to wait on the
+          international or the domestic side. A customer booking an airport pickup must choose one of
+          these, and it is passed to the driver.
+        </div>
+
+        <div id="terminal_rows">
+          {% for terminal in airport_terminals %}
+          <div class="row g-2 mb-2 terminal-row">
+            <div class="col-sm-10">
+              <input type="text" name="airport_terminal" value="{{ terminal }}" class="form-ctrl" placeholder="e.g. International Arrivals">
+            </div>
+            <div class="col-sm-2">
+              <button type="button" class="btn-remove-terminal" style="width:100%;padding:8px;border:1px solid #fca5a5;background:#fef2f2;color:#b91c1c;border-radius:8px;cursor:pointer">
+                <i class="bi bi-trash"></i>
+              </button>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+
+        <button type="button" id="add_terminal" style="margin:6px 0 16px;padding:8px 14px;border:1px dashed #9ca3af;background:#fff;border-radius:8px;cursor:pointer;font-size:13px">
+          <i class="bi bi-plus-circle me-1"></i>Add a collection point
+        </button>
+
+        <div>
+          <button type="submit" class="btn-green"><i class="bi bi-floppy-fill me-2"></i>Save Collection Points</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Booking Limits, Hand Luggage & Payment Rules -->
   <div class="dash-card mb-3">
     <div class="dash-card-header">
@@ -374,7 +429,10 @@
           <div class="col-sm-6">
             <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">Fee per extra item ($)</label>
             <input type="number" name="hand_luggage_fee" value="{{ site_settings.hand_luggage_fee }}" step="0.01" min="0" class="form-ctrl">
-            <div style="font-size:11px;color:#9ca3af;margin-top:4px">Set to <strong>0</strong> to make hand luggage always free.</div>
+            <div style="font-size:11px;color:#9ca3af;margin-top:4px">
+              Set to <strong>0</strong> to make hand luggage always free. Bags beyond the allowance take
+              boot space like a suitcase, so they are charged like one.
+            </div>
           </div>
         </div>
 
@@ -561,5 +619,35 @@
     `;
     document.getElementById('bracketBody').appendChild(row);
   });
+</script>
+<script>
+  // Airport collection points: rows can be added and removed before saving.
+  (function () {
+    const rows = document.getElementById('terminal_rows');
+    const addBtn = document.getElementById('add_terminal');
+    if (!rows || !addBtn) return;
+
+    function rowMarkup(value) {
+      const row = document.createElement('div');
+      row.className = 'row g-2 mb-2 terminal-row';
+      row.innerHTML =
+        '<div class="col-sm-10">' +
+        '<input type="text" name="airport_terminal" value="' + (value || '') + '" class="form-ctrl" placeholder="e.g. International Arrivals">' +
+        '</div>' +
+        '<div class="col-sm-2">' +
+        '<button type="button" class="btn-remove-terminal" style="width:100%;padding:8px;border:1px solid #fca5a5;background:#fef2f2;color:#b91c1c;border-radius:8px;cursor:pointer">' +
+        '<i class="bi bi-trash"></i></button></div>';
+      return row;
+    }
+
+    addBtn.addEventListener('click', () => rows.appendChild(rowMarkup('')));
+
+    rows.addEventListener('click', (event) => {
+      const btn = event.target.closest('.btn-remove-terminal');
+      if (!btn) return;
+      const row = btn.closest('.terminal-row');
+      if (row) row.remove();
+    });
+  })();
 </script>
 {% endblock %}
