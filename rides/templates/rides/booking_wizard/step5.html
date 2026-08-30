@@ -100,6 +100,7 @@
                         {% if booking.arrival_flight_number %} - {{ booking.arrival_flight_number }}{% endif %}
                         {% if booking.arrival_date %} on {{ booking.arrival_date }}{% endif %}
                         {% if booking.arrival_time %} at {{ booking.arrival_time }}{% endif %}
+                        {% if booking.pickup_airport_terminal %}<br>{{ booking.pickup_airport_terminal }}{% endif %}
                     </strong>
                 </div>
             </div>
@@ -125,6 +126,14 @@
                 <span>Return trip:</span>
                 <strong>{{ booking.return_date }} at {{ booking.return_time }}</strong>
             </div>
+            {% if booking.return_uses_different_points %}
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid white; padding-bottom: 8px;">
+                <span>Return route:</span>
+                <div style="text-align: right; max-width: 60%;">
+                    <strong>{{ booking.return_pickup_display }}<br>&rarr; {{ booking.return_dropoff_display }}</strong>
+                </div>
+            </div>
+            {% endif %}
             {% if booking.price_breakdown.return_leg_fee %}
             <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid white; padding-bottom: 8px;">
                 <span>Return leg fare:</span>

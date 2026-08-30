@@ -62,6 +62,12 @@
                     <span><i class="bi bi-handbag"></i> Hand Luggage ({{ fare_breakdown.hand_luggage_count }} item{{ fare_breakdown.hand_luggage_count|pluralize }}):</span>
                     <strong>{% if fare_breakdown.hand_luggage_fee > 0 %}${{ fare_breakdown.hand_luggage_fee|floatformat:2 }}{% else %}Free{% endif %}</strong>
                 </div>
+                {% if fare_breakdown.hand_luggage_chargeable > 0 %}
+                    <div class="fare-row" style="font-size: 12px; color: #666; margin-left: 20px;">
+                        <span>Free items included: {{ fare_breakdown.hand_luggage_free }}</span>
+                        <span>Chargeable items: {{ fare_breakdown.hand_luggage_chargeable }}</span>
+                    </div>
+                {% endif %}
             {% endif %}
 
             {% if fare_breakdown.stops_count > 0 %}
@@ -89,7 +95,7 @@
 
             {% if fare_breakdown.is_return_trip %}
                 <div class="fare-row">
-                    <span><i class="bi bi-arrow-left-right"></i> Return leg{% if fare_breakdown.return_discount_percent %} (less {{ fare_breakdown.return_discount_percent|floatformat:"-2" }}%){% endif %}:</span>
+                    <span><i class="bi bi-arrow-left-right"></i> Return leg{% if fare_breakdown.return_uses_own_route %} on its own route ({{ fare_breakdown.return_distance_km|floatformat:1 }} km){% endif %}{% if fare_breakdown.return_discount_percent %} (less {{ fare_breakdown.return_discount_percent|floatformat:"-2" }}%){% endif %}:</span>
                     <strong>${{ fare_breakdown.return_leg_fee|floatformat:2 }}</strong>
                 </div>
                 {% if fare_breakdown.return_night_surcharge > 0 %}
@@ -126,13 +132,22 @@
                 <a href="{% url 'rides:booking_wizard' step=1 %}">Edit</a>
             </div>
             <div class="review-row"><span>Pickup</span><strong>{{ step1_data.pickup_address }}</strong></div>
+            {% if step1_data.pickup_point_detail %}
+            <div class="review-row"><span>Exact pickup point</span><strong>{{ step1_data.pickup_point_detail }}</strong></div>
+            {% endif %}
             <div class="review-row"><span>Dropoff</span><strong>{{ step1_data.dropoff_address }}</strong></div>
+            {% if step1_data.dropoff_point_detail %}
+            <div class="review-row"><span>Exact drop-off point</span><strong>{{ step1_data.dropoff_point_detail }}</strong></div>
+            {% endif %}
             <div class="review-row">
                 <span>Pickup date &amp; time</span>
                 <strong>{{ step1_data.pickup_date }} at {{ step1_data.pickup_time }}</strong>
             </div>
             {% if step1_data.pickup_is_airport %}
             <div class="review-row"><span>Airport pickup</span><strong>Yes</strong></div>
+            {% if step1_data.pickup_airport_terminal %}
+            <div class="review-row"><span>Collection point</span><strong>{{ step1_data.pickup_airport_terminal }}</strong></div>
+            {% endif %}
             <div class="review-row">
                 <span>Flight</span>
                 <strong>{{ step1_data.arrival_airline }} {{ step1_data.arrival_flight_number }}</strong>
@@ -141,12 +156,39 @@
                 <span>Arrival</span>
                 <strong>{{ step1_data.arrival_date }} at {{ step1_data.arrival_time }}</strong>
             </div>
+            {% if step1_data.flight_departure_airport %}
+            <div class="review-row"><span>Departing from</span><strong>{{ step1_data.flight_departure_airport }}</strong></div>
+            {% endif %}
+            {% if step1_data.flight_connection_details %}
+            <div class="review-row"><span>Connection</span><strong>{{ step1_data.flight_connection_details }}</strong></div>
+            {% endif %}
+            {% if step1_data.flight_notes %}
+            <div class="review-row"><span>Flight notes</span><strong>{{ step1_data.flight_notes }}</strong></div>
+            {% endif %}
             {% endif %}
             {% if step1_data.is_return_trip %}
             <div class="review-row">
                 <span>Return trip</span>
                 <strong>{{ step1_data.return_date }} at {{ step1_data.return_time }}</strong>
             </div>
+            {% if step1_data.return_use_different_points %}
+            <div class="review-row">
+                <span>Return pickup</span>
+                <strong>{{ step1_data.return_pickup_address }}{% if step1_data.return_pickup_point_detail %} &mdash; {{ step1_data.return_pickup_point_detail }}{% endif %}</strong>
+            </div>
+            <div class="review-row">
+                <span>Return dropoff</span>
+                <strong>{{ step1_data.return_dropoff_address }}{% if step1_data.return_dropoff_point_detail %} &mdash; {{ step1_data.return_dropoff_point_detail }}{% endif %}</strong>
+            </div>
+            {% if fare_breakdown.return_distance_km %}
+            <div class="review-row">
+                <span>Return distance</span>
+                <strong>{{ fare_breakdown.return_distance_km|floatformat:1 }} km</strong>
+            </div>
+            {% endif %}
+            {% else %}
+            <div class="review-row"><span>Return route</span><strong>Same trip in reverse</strong></div>
+            {% endif %}
             {% else %}
             <div class="review-row"><span>Return trip</span><strong>No &mdash; one way only</strong></div>
             {% endif %}

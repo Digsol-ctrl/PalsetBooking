@@ -73,6 +73,28 @@ class Step1PickupDropoffForm(forms.Form):
         widget=forms.HiddenInput(attrs={'id': 'dropoff_longitude'}),
         required=False
     )
+
+    # Exact meeting points. A place name alone (an airport, a hospital, a shopping
+    # centre) does not tell the driver which entrance to wait at.
+    pickup_point_detail = forms.CharField(
+        max_length=256,
+        required=False,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'e.g. outside Gate 2, by the coffee kiosk',
+            'id': 'pickup_point_detail',
+        })
+    )
+    dropoff_point_detail = forms.CharField(
+        max_length=256,
+        required=False,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'e.g. main entrance, Block C reception',
+            'id': 'dropoff_point_detail',
+        })
+    )
+
     # Scheduling and airport-specific fields
     pickup_date = forms.DateField(
         required=False,
@@ -99,6 +121,36 @@ class Step1PickupDropoffForm(forms.Form):
     arrival_date = forms.DateField(required=False, widget=forms.DateInput(attrs={'class': 'form-control', 'type': 'date', 'id': 'id_arrival_date'}))
     arrival_time = forms.TimeField(required=False, widget=forms.TimeInput(attrs={'class': 'form-control', 'type': 'time', 'id': 'id_arrival_time'}))
 
+    # Which side of the airport the driver waits at. Choices come from the
+    # dashboard, so terminals can be renamed without a code change.
+    pickup_airport_terminal = forms.ChoiceField(
+        required=False,
+        choices=(),
+        widget=forms.RadioSelect(attrs={'class': 'form-check-input'})
+    )
+
+    # Extra flight context, revealed by the "add more flight details" button.
+    flight_departure_airport = forms.CharField(
+        max_length=128,
+        required=False,
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g. OR Tambo, Johannesburg', 'id': 'id_flight_departure_airport'})
+    )
+    flight_connection_details = forms.CharField(
+        max_length=256,
+        required=False,
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g. connecting from EK712, landing 06:40', 'id': 'id_flight_connection_details'})
+    )
+    flight_notes = forms.CharField(
+        max_length=500,
+        required=False,
+        widget=forms.Textarea(attrs={
+            'class': 'form-control',
+            'rows': 3,
+            'id': 'id_flight_notes',
+            'placeholder': "Anything else about the flight — e.g. 'I may switch to an earlier flight in Johannesburg'",
+        })
+    )
+
     # Return trip (one booking covering the journey back)
     is_return_trip = forms.BooleanField(
         required=False,
@@ -113,10 +165,61 @@ class Step1PickupDropoffForm(forms.Form):
         widget=forms.TimeInput(attrs={'class': 'form-control', 'type': 'time', 'id': 'return_time'})
     )
 
+    # The way back need not retrace the way out — we may drop the passenger in one
+    # place and collect them from another.
+    return_use_different_points = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={'id': 'return_use_different_points', 'class': 'form-check-input'})
+    )
+    return_pickup_address = forms.CharField(
+        max_length=512,
+        required=False,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'Where should we collect you for the return trip?',
+            'id': 'return_pickup_address',
+            'autocomplete': 'off',
+        })
+    )
+    return_pickup_latitude = forms.FloatField(required=False, widget=forms.HiddenInput(attrs={'id': 'return_pickup_latitude'}))
+    return_pickup_longitude = forms.FloatField(required=False, widget=forms.HiddenInput(attrs={'id': 'return_pickup_longitude'}))
+    return_pickup_point_detail = forms.CharField(
+        max_length=256,
+        required=False,
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Exact meeting point (optional)', 'id': 'return_pickup_point_detail'})
+    )
+    return_dropoff_address = forms.CharField(
+        max_length=512,
+        required=False,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'Where should we take you on the way back?',
+            'id': 'return_dropoff_address',
+            'autocomplete': 'off',
+        })
+    )
+    return_dropoff_latitude = forms.FloatField(required=False, widget=forms.HiddenInput(attrs={'id': 'return_dropoff_latitude'}))
+    return_dropoff_longitude = forms.FloatField(required=False, widget=forms.HiddenInput(attrs={'id': 'return_dropoff_longitude'}))
+    return_dropoff_point_detail = forms.CharField(
+        max_length=256,
+        required=False,
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Exact drop-off point (optional)', 'id': 'return_dropoff_point_detail'})
+    )
+    return_distance_km = forms.FloatField(
+        required=False,
+        widget=forms.HiddenInput(attrs={'id': 'return_distance_km'}),
+    )
+
     distance_km = forms.FloatField(
         required=False,
         widget=forms.HiddenInput(attrs={'id': 'distance_km'}),
     )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        from .services.pricing import PricingService
+        self.airport_terminals = PricingService.get_airport_terminals()
+        self.fields['pickup_airport_terminal'].choices = [(t, t) for t in self.airport_terminals]
 
     def clean(self):
         cleaned = super().clean()
@@ -136,6 +239,10 @@ class Step1PickupDropoffForm(forms.Form):
                 raise ValidationError('For airport pickups please provide arrival airline and flight number.')
             if not cleaned.get('arrival_date') or not cleaned.get('arrival_time'):
                 raise ValidationError('For airport pickups please provide arrival date and arrival time.')
+            # An airport name alone is ambiguous — the international and domestic
+            # sides are different places to wait, so the customer must pick one.
+            if not cleaned.get('pickup_airport_terminal'):
+                raise ValidationError('Please tell us which part of the airport to collect you from.')
 
             cleaned['pickup_date'] = cleaned.get('arrival_date')
             cleaned['pickup_time'] = cleaned.get('arrival_time')
@@ -145,6 +252,7 @@ class Step1PickupDropoffForm(forms.Form):
             if not cleaned.get('pickup_date') or not cleaned.get('pickup_time'):
                 raise ValidationError('Please provide pickup date and pickup time.')
             _reject_past_pickup(cleaned.get('pickup_date'), cleaned.get('pickup_time'))
+            cleaned['pickup_airport_terminal'] = ''
 
         # A return trip needs its own date and time, after the outbound pickup.
         if cleaned.get('is_return_trip'):
@@ -162,11 +270,42 @@ class Step1PickupDropoffForm(forms.Form):
                 back = datetime.combine(return_date, return_time)
                 if back <= outbound:
                     raise ValidationError('The return trip must be after the pickup date and time.')
+
+            # The return leg may run its own route. Both ends are needed, with
+            # coordinates, because the leg is re-priced on its own distance.
+            if cleaned.get('return_use_different_points'):
+                if not cleaned.get('return_pickup_address') or not cleaned.get('return_dropoff_address'):
+                    raise ValidationError(
+                        'Please give both the return pickup and the return drop-off location, '
+                        'or untick the box to travel back the same way.'
+                    )
+                coords = (
+                    cleaned.get('return_pickup_latitude'), cleaned.get('return_pickup_longitude'),
+                    cleaned.get('return_dropoff_latitude'), cleaned.get('return_dropoff_longitude'),
+                )
+                if not all(coords):
+                    raise ValidationError(
+                        'Please pick the return locations from the suggestions so we can measure the return trip.'
+                    )
+            else:
+                self._clear_return_route(cleaned)
         else:
             cleaned['return_date'] = None
             cleaned['return_time'] = None
+            cleaned['return_use_different_points'] = False
+            self._clear_return_route(cleaned)
 
         return cleaned
+
+    @staticmethod
+    def _clear_return_route(cleaned):
+        """Drop any return-route values so the return leg mirrors the outbound trip."""
+        for field in (
+            'return_pickup_address', 'return_pickup_latitude', 'return_pickup_longitude',
+            'return_pickup_point_detail', 'return_dropoff_address', 'return_dropoff_latitude',
+            'return_dropoff_longitude', 'return_dropoff_point_detail', 'return_distance_km',
+        ):
+            cleaned[field] = None if field.endswith(('latitude', 'longitude', 'km')) else ''
 
 
 class Step2PassengersLuggageForm(forms.Form):
@@ -550,6 +689,68 @@ class BookingForm(forms.Form):
         if cleaned.get('num_adults') < 1:
             raise ValidationError('At least one adult is required')
 
+        return cleaned
+
+
+class UpdateFlightDetailsForm(forms.Form):
+    """Customer-facing form for correcting flight details after booking.
+
+    Passengers routinely change flights mid-journey — a different connection out of
+    Johannesburg lands them at a different hour, sometimes on a different day — so
+    this stays open right up to the pickup, unlike a normal reschedule. The pickup
+    follows the new arrival, and the fare is re-checked with it because the night
+    surcharge depends on the hour.
+    """
+
+    arrival_airline = forms.CharField(
+        max_length=64,
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g. Airlink', 'id': 'update_airline'})
+    )
+    arrival_flight_number = forms.CharField(
+        max_length=32,
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g. 4Z110', 'id': 'update_flight_number'})
+    )
+    arrival_date = forms.DateField(
+        widget=forms.DateInput(attrs={'class': 'form-control', 'type': 'date', 'id': 'update_arrival_date'})
+    )
+    arrival_time = forms.TimeField(
+        widget=forms.TimeInput(attrs={'class': 'form-control', 'type': 'time', 'id': 'update_arrival_time'})
+    )
+    pickup_airport_terminal = forms.ChoiceField(
+        required=False,
+        choices=(),
+        widget=forms.Select(attrs={'class': 'form-control', 'id': 'update_terminal'})
+    )
+    flight_departure_airport = forms.CharField(
+        max_length=128,
+        required=False,
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g. OR Tambo, Johannesburg', 'id': 'update_departure_airport'})
+    )
+    flight_connection_details = forms.CharField(
+        max_length=256,
+        required=False,
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g. connecting from EK712', 'id': 'update_connection'})
+    )
+    flight_notes = forms.CharField(
+        max_length=500,
+        required=False,
+        widget=forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'id': 'update_flight_notes',
+                                     'placeholder': 'Anything else the driver should know about your arrival'})
+    )
+
+    def __init__(self, *args, booking=None, **kwargs):
+        self.booking = booking
+        super().__init__(*args, **kwargs)
+        from .services.pricing import PricingService
+        terminals = PricingService.get_airport_terminals()
+        current = getattr(booking, 'pickup_airport_terminal', '') or ''
+        if current and current not in terminals:
+            terminals = terminals + [current]
+        self.fields['pickup_airport_terminal'].choices = [('', 'Not specified')] + [(t, t) for t in terminals]
+
+    def clean(self):
+        cleaned = super().clean()
+        _reject_past_pickup(cleaned.get('arrival_date'), cleaned.get('arrival_time'), label='flight arrival')
         return cleaned
 
 

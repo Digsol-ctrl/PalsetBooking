@@ -104,13 +104,24 @@
           </span>
         </strong>
       </div>
-      <div class="row"><span>Pickup</span><strong>{{ booking.pickup_address }}</strong></div>
+      <div class="row"><span>Pickup</span><strong>{{ booking.pickup_display }}</strong></div>
       {% if booking.ride_type != 'chauffeur' %}
-      <div class="row"><span>Dropoff</span><strong>{{ booking.dropoff_address }}</strong></div>
+      <div class="row"><span>Dropoff</span><strong>{{ booking.dropoff_display }}</strong></div>
+      {% endif %}
+      {% if booking.pickup_is_airport %}
+      <div class="row">
+        <span>Flight</span>
+        <strong>
+          {{ booking.arrival_airline }} {{ booking.arrival_flight_number }}
+          &mdash; arriving {{ booking.arrival_date }} at {{ booking.arrival_time }}
+        </strong>
+      </div>
       {% endif %}
       <div class="row"><span>Date &amp; time</span><strong>{{ booking.pickup_date }} at {{ booking.pickup_time }}</strong></div>
       {% if booking.is_return_trip %}
       <div class="row"><span>Return</span><strong>{{ booking.return_date }} at {{ booking.return_time }}</strong></div>
+      <div class="row"><span>Return pickup</span><strong>{{ booking.return_pickup_display }}</strong></div>
+      <div class="row"><span>Return dropoff</span><strong>{{ booking.return_dropoff_display }}</strong></div>
       {% endif %}
       <div class="row">
         <span>Passengers</span>
@@ -142,6 +153,74 @@
           </div>
           {% endif %}
         </div>
+      </div>
+    </div>
+  {% endif %}
+
+  {% if can_update_flight %}
+    <div class="card">
+      <div class="card-body">
+        <h2><i class="bi bi-airplane"></i> My flight has changed</h2>
+        <p style="font-size:13px;color:#64748b;margin:0 0 14px">
+          Rebooked onto a different flight? Update it here and your driver will meet the new arrival.
+          You can do this right up to your pickup.
+        </p>
+        <form method="post">
+          <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
+          <input type="hidden" name="action" value="update_flight">
+
+          <div class="field-row">
+            <div>
+              <label for="update_airline">Airline</label>
+              {{ flight_form.arrival_airline }}
+            </div>
+            <div>
+              <label for="update_flight_number">Flight number</label>
+              {{ flight_form.arrival_flight_number }}
+            </div>
+          </div>
+
+          <div class="field-row">
+            <div>
+              <label for="update_arrival_date">Arrival date</label>
+              {{ flight_form.arrival_date }}
+            </div>
+            <div>
+              <label for="update_arrival_time">Arrival time</label>
+              {{ flight_form.arrival_time }}
+            </div>
+          </div>
+
+          <div style="margin-bottom:12px">
+            <label for="update_terminal">Where should we meet you?</label>
+            {{ flight_form.pickup_airport_terminal }}
+          </div>
+
+          <div style="margin-bottom:12px">
+            <label for="update_departure_airport">Departing from</label>
+            {{ flight_form.flight_departure_airport }}
+          </div>
+
+          <div style="margin-bottom:12px">
+            <label for="update_connection">Connecting flight</label>
+            {{ flight_form.flight_connection_details }}
+          </div>
+
+          <div style="margin-bottom:12px">
+            <label for="update_flight_notes">Anything else we should know</label>
+            {{ flight_form.flight_notes }}
+          </div>
+
+          <div class="alert alert-info" style="font-size:13px">
+            <i class="bi bi-info-circle"></i>
+            Your pickup moves to the new arrival time. If that lands in our night window the fare
+            changes, and we&rsquo;ll show you the new total straight away.
+          </div>
+
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-check-lg"></i> Update my flight details
+          </button>
+        </form>
       </div>
     </div>
   {% endif %}

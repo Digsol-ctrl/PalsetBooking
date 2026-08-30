@@ -48,6 +48,7 @@ from .forms import (
     ChauffeurStep2Form,
     ChauffeurStep4ContactForm,
     RescheduleBookingForm,
+    UpdateFlightDetailsForm,
 )
 from .serializers import (
     CreateBookingSerializer,
@@ -70,8 +71,12 @@ def _logo_url():
     return None
 
 
-def _calculate_fare(distance_km, num_adults, num_kids_seated=0, baby_car_seater=0, num_kids_carried=0, luggage_count=0, hand_luggage_count=0, pickup_time=None, stops=None, is_return_trip=False, return_time=None):
-    """Pick city vs long-distance pricing automatically based on distance threshold."""
+def _calculate_fare(distance_km, num_adults, num_kids_seated=0, baby_car_seater=0, num_kids_carried=0, luggage_count=0, hand_luggage_count=0, pickup_time=None, stops=None, is_return_trip=False, return_time=None, return_distance_km=None):
+    """Pick city vs long-distance pricing automatically based on distance threshold.
+
+    The ride type is set by the outbound distance; a return leg on its own route is
+    then priced under the same rules, on its own distance.
+    """
     if PricingService.is_long_distance(distance_km):
         return PricingService.calculate_long_distance(
             distance_km=distance_km,
@@ -82,6 +87,7 @@ def _calculate_fare(distance_km, num_adults, num_kids_seated=0, baby_car_seater=
             stops=stops,
             is_return_trip=is_return_trip,
             return_time=return_time,
+            return_distance_km=return_distance_km,
         )
     return PricingService.calculate(
         distance_km=distance_km,
@@ -95,7 +101,47 @@ def _calculate_fare(distance_km, num_adults, num_kids_seated=0, baby_car_seater=
         stops=stops,
         is_return_trip=is_return_trip,
         return_time=return_time,
+        return_distance_km=return_distance_km,
     )
+
+
+def _as_decimal(value):
+    """Decimal for the database, or None when the value is missing or unusable."""
+    if value is None or value == '':
+        return None
+    try:
+        return Decimal(str(value))
+    except Exception:
+        return None
+
+
+def _return_leg_distance(step1):
+    """Distance of the return leg when it runs its own route, else None.
+
+    Measured from the return coordinates the customer picked; falls back to the
+    value the browser already worked out if the lookup fails.
+    """
+    if not step1.get('is_return_trip') or not step1.get('return_use_different_points'):
+        return None
+
+    cached = step1.get('return_distance_km')
+    coords = (
+        step1.get('return_pickup_latitude'), step1.get('return_pickup_longitude'),
+        step1.get('return_dropoff_latitude'), step1.get('return_dropoff_longitude'),
+    )
+    if not all(coords):
+        return float(cached) if cached else None
+
+    try:
+        return DistanceService.get_distance_km(
+            (coords[0], coords[1]), (coords[2], coords[3]),
+        )
+    except Exception:
+        logger.exception('Could not measure the return leg; falling back to the submitted distance')
+        try:
+            return float(cached) if cached else None
+        except (TypeError, ValueError):
+            return None
 
 logger = logging.getLogger(__name__)
 
@@ -137,7 +183,7 @@ def build_booking_message(booking, eta_minutes=None, payment_label_override: Opt
             parts.append("*Service:* Long Distance")
 
         # Pickup with optional date/time
-        pickup_line = f"*Pickup:* {booking.pickup_address}"
+        pickup_line = f"*Pickup:* {getattr(booking, 'pickup_display', None) or booking.pickup_address}"
         if getattr(booking, 'pickup_date', None):
             try:
                 pickup_line += f" on {booking.pickup_date.isoformat()}"
@@ -174,8 +220,19 @@ def build_booking_message(booking, eta_minutes=None, payment_label_override: Opt
                         arr_parts.append(f"Arrival time: {at}")
                 parts.append("*Arrival:* " + ", ".join(arr_parts))
 
+            # Extra flight context the passenger added (or corrected later)
+            extra_flight = []
+            if getattr(booking, 'flight_departure_airport', ''):
+                extra_flight.append(f"Departing from: {booking.flight_departure_airport}")
+            if getattr(booking, 'flight_connection_details', ''):
+                extra_flight.append(f"Connection: {booking.flight_connection_details}")
+            if extra_flight:
+                parts.append("*Flight details:* " + ", ".join(extra_flight))
+            if getattr(booking, 'flight_notes', ''):
+                parts.append(f"*Flight notes:* {booking.flight_notes}")
+
         if ride_type != 'chauffeur':
-            parts.append(f"*Dropoff:* {booking.dropoff_address}")
+            parts.append(f"*Dropoff:* {getattr(booking, 'dropoff_display', None) or booking.dropoff_address}")
             parts.append(f"*Distance:* {booking.distance_km} km")
         else:
             aet = getattr(booking, 'approximate_end_time', None)
@@ -257,6 +314,11 @@ def build_booking_message(booking, eta_minutes=None, payment_label_override: Opt
                 except Exception:
                     return_line += f" at {rt}"
             parts.append(return_line)
+            if getattr(booking, 'return_uses_different_points', False):
+                parts.append(f"*Return pickup:* {booking.return_pickup_display}")
+                parts.append(f"*Return dropoff:* {booking.return_dropoff_display}")
+                if getattr(booking, 'return_distance_km', None):
+                    parts.append(f"*Return distance:* {booking.return_distance_km} km")
             if breakdown.get('return_leg_fee'):
                 parts.append(f"*Return leg fare:* ${breakdown['return_leg_fee']:.2f}")
             if breakdown.get('return_night_surcharge'):
@@ -383,6 +445,7 @@ class MultiStepBookingWizardView(View):
             'booking_limits': PricingService.get_booking_limits(),
             'stop_tiers': PricingService.get_stop_tiers(),
             'night_cfg': PricingService.get_night_cfg(),
+            'hand_luggage_cfg': PricingService.get_hand_luggage_cfg(),
             'return_discount_percent': PricingService.get_return_discount_percent(),
         }
 
@@ -498,6 +561,7 @@ class MultiStepBookingWizardView(View):
                     stops=step2.get('stops', []),
                     is_return_trip=step1.get('is_return_trip', False),
                     return_time=step1.get('return_time'),
+                    return_distance_km=_return_leg_distance(step1),
                 )
                 context['fare_breakdown'] = fare_breakdown
                 context['estimated_fare'] = fare_breakdown['total']
@@ -598,14 +662,30 @@ class MultiStepBookingWizardView(View):
                     'distance_km': form.cleaned_data.get('distance_km') or 0,
                     'pickup_date': _iso_date(form.cleaned_data.get('pickup_date')),
                     'pickup_time': _iso_date(form.cleaned_data.get('pickup_time')),
+                    'pickup_point_detail': form.cleaned_data.get('pickup_point_detail') or '',
+                    'dropoff_point_detail': form.cleaned_data.get('dropoff_point_detail') or '',
                     'pickup_is_airport': bool(form.cleaned_data.get('pickup_is_airport')),
+                    'pickup_airport_terminal': form.cleaned_data.get('pickup_airport_terminal') or '',
                     'arrival_airline': form.cleaned_data.get('arrival_airline'),
                     'arrival_flight_number': form.cleaned_data.get('arrival_flight_number'),
                     'arrival_date': _iso_date(form.cleaned_data.get('arrival_date')),
                     'arrival_time': _iso_date(form.cleaned_data.get('arrival_time')),
+                    'flight_departure_airport': form.cleaned_data.get('flight_departure_airport') or '',
+                    'flight_connection_details': form.cleaned_data.get('flight_connection_details') or '',
+                    'flight_notes': form.cleaned_data.get('flight_notes') or '',
                     'is_return_trip': bool(form.cleaned_data.get('is_return_trip')),
                     'return_date': _iso_date(form.cleaned_data.get('return_date')),
                     'return_time': _iso_date(form.cleaned_data.get('return_time')),
+                    'return_use_different_points': bool(form.cleaned_data.get('return_use_different_points')),
+                    'return_pickup_address': form.cleaned_data.get('return_pickup_address') or '',
+                    'return_pickup_latitude': form.cleaned_data.get('return_pickup_latitude'),
+                    'return_pickup_longitude': form.cleaned_data.get('return_pickup_longitude'),
+                    'return_pickup_point_detail': form.cleaned_data.get('return_pickup_point_detail') or '',
+                    'return_dropoff_address': form.cleaned_data.get('return_dropoff_address') or '',
+                    'return_dropoff_latitude': form.cleaned_data.get('return_dropoff_latitude'),
+                    'return_dropoff_longitude': form.cleaned_data.get('return_dropoff_longitude'),
+                    'return_dropoff_point_detail': form.cleaned_data.get('return_dropoff_point_detail') or '',
+                    'return_distance_km': form.cleaned_data.get('return_distance_km'),
                 }
                 self.request.session.modified = True
                 return redirect('rides:booking_wizard', step=2)
@@ -653,6 +733,7 @@ class MultiStepBookingWizardView(View):
                     'step2_data': wizard_data.get('step2', {}),
                     'booking_limits': PricingService.get_booking_limits(),
                     'stop_tiers': PricingService.get_stop_tiers(),
+                    'hand_luggage_cfg': PricingService.get_hand_luggage_cfg(),
                     'GOOGLE_MAPS_CLIENT_KEY': settings.GOOGLE_MAPS_CLIENT_KEY,
                     'TAXI_OWNER_PHONE': settings.TAXI_OWNER_PHONE,
                 }
@@ -705,6 +786,8 @@ class MultiStepBookingWizardView(View):
                             (step1['dropoff_latitude'], step1['dropoff_longitude']),
                         )
 
+                    return_distance_km = _return_leg_distance(step1)
+
                     fare_breakdown = _calculate_fare(
                         distance_km=distance_km,
                         num_adults=merged_adult_count(step2.get('num_adults', 1), step2.get('num_kids_seated', 0)),
@@ -716,6 +799,7 @@ class MultiStepBookingWizardView(View):
                         stops=step2.get('stops', []),
                         is_return_trip=step1.get('is_return_trip', False),
                         return_time=step1.get('return_time'),
+                        return_distance_km=return_distance_km,
                     )
 
                     # Paynow carries high fees on small amounts, so it is only offered
@@ -765,16 +849,32 @@ class MultiStepBookingWizardView(View):
                             is_return_trip=step1.get('is_return_trip', False),
                             return_date=step1.get('return_date'),
                             return_time=step1.get('return_time'),
+                            return_uses_different_points=step1.get('return_use_different_points', False),
+                            return_pickup_address=step1.get('return_pickup_address') or '',
+                            return_pickup_lat=_as_decimal(step1.get('return_pickup_latitude')),
+                            return_pickup_lng=_as_decimal(step1.get('return_pickup_longitude')),
+                            return_pickup_point_detail=step1.get('return_pickup_point_detail') or '',
+                            return_dropoff_address=step1.get('return_dropoff_address') or '',
+                            return_dropoff_lat=_as_decimal(step1.get('return_dropoff_latitude')),
+                            return_dropoff_lng=_as_decimal(step1.get('return_dropoff_longitude')),
+                            return_dropoff_point_detail=step1.get('return_dropoff_point_detail') or '',
+                            return_distance_km=_as_decimal(return_distance_km),
                             phone=step3['phone'],
                             email=step3['email'],
                             extra_instructions=step3.get('extra_instructions', ''),
                             pickup_date=step1.get('pickup_date'),
                             pickup_time=step1.get('pickup_time'),
+                            pickup_point_detail=step1.get('pickup_point_detail') or '',
+                            dropoff_point_detail=step1.get('dropoff_point_detail') or '',
                             pickup_is_airport=step1.get('pickup_is_airport', False),
+                            pickup_airport_terminal=step1.get('pickup_airport_terminal') or '',
                             arrival_airline=step1.get('arrival_airline'),
                             arrival_flight_number=step1.get('arrival_flight_number'),
                             arrival_date=step1.get('arrival_date'),
                             arrival_time=step1.get('arrival_time'),
+                            flight_departure_airport=step1.get('flight_departure_airport') or '',
+                            flight_connection_details=step1.get('flight_connection_details') or '',
+                            flight_notes=step1.get('flight_notes') or '',
                             salutation=step2.get('salutation'),
                             passenger_full_name=step2.get('passenger_full_name'),
                             payment_option=payment_method,
@@ -2212,6 +2312,19 @@ class ManageBookingView(View):
             'logo_url': _logo_url(),
             'TAXI_OWNER_PHONE': settings.TAXI_OWNER_PHONE,
             'csrf_token': get_token(request),
+            'flight_form': extra.pop('flight_form', None) or UpdateFlightDetailsForm(
+                booking=booking,
+                initial={
+                    'arrival_airline': booking.arrival_airline,
+                    'arrival_flight_number': booking.arrival_flight_number,
+                    'arrival_date': booking.arrival_date,
+                    'arrival_time': booking.arrival_time,
+                    'pickup_airport_terminal': booking.pickup_airport_terminal,
+                    'flight_departure_airport': booking.flight_departure_airport,
+                    'flight_connection_details': booking.flight_connection_details,
+                    'flight_notes': booking.flight_notes,
+                },
+            ),
         }
         context.update(state)
         context.update(extra)
@@ -2247,6 +2360,8 @@ class ManageBookingView(View):
             return self._handle_cancel(request, booking, token, state)
         if action == 'reschedule':
             return self._handle_reschedule(request, booking, token, state)
+        if action == 'update_flight':
+            return self._handle_flight_update(request, booking, token, state)
 
         return redirect('rides:manage_booking', token=token)
 
@@ -2272,6 +2387,92 @@ class ManageBookingView(View):
         return render(request, self.template_name, self._context(
             request, booking, token=token,
             success_message='Your booking has been cancelled. We have let the team know.',
+        ))
+
+    # ----------------------------------------------------------- flight details
+    def _handle_flight_update(self, request, booking, token, state):
+        """Record a corrected flight, and move the pickup with it.
+
+        Airlines move people around at short notice, so this is allowed inside the
+        normal change cut-off — a passenger who is rebooked while connecting still
+        needs the driver to meet the right flight.
+        """
+        if not state['can_update_flight']:
+            return render(request, self.template_name, self._context(
+                request, booking, token=token,
+                error_message=state['flight_blocked_reason'] or 'Flight details can no longer be changed online.',
+            ))
+
+        form = UpdateFlightDetailsForm(request.POST, booking=booking)
+        if not form.is_valid():
+            return render(request, self.template_name, self._context(
+                request, booking, token=token, flight_form=form,
+                error_message='; '.join(form.errors.get('__all__', [])) or 'Please check the flight details below.',
+            ))
+
+        old_flight = f"{booking.arrival_airline or '-'} {booking.arrival_flight_number or '-'}"
+        old_arrival = f"{booking.arrival_date} {booking.arrival_time}"
+
+        booking.arrival_airline = form.cleaned_data['arrival_airline']
+        booking.arrival_flight_number = form.cleaned_data['arrival_flight_number']
+        booking.arrival_date = form.cleaned_data['arrival_date']
+        booking.arrival_time = form.cleaned_data['arrival_time']
+        booking.pickup_airport_terminal = form.cleaned_data.get('pickup_airport_terminal') or ''
+        booking.flight_departure_airport = form.cleaned_data.get('flight_departure_airport') or ''
+        booking.flight_connection_details = form.cleaned_data.get('flight_connection_details') or ''
+        booking.flight_notes = form.cleaned_data.get('flight_notes') or ''
+        booking.flight_details_updated_at = timezone.now()
+
+        # The pickup is timed off the arrival for an airport booking, so it follows.
+        booking.pickup_is_airport = True
+        booking.pickup_date = booking.arrival_date
+        booking.pickup_time = booking.arrival_time
+
+        new_flight = f"{booking.arrival_airline} {booking.arrival_flight_number}"
+        detail = (
+            f"Flight changed from {old_flight} arriving {old_arrival} to {new_flight} "
+            f"arriving {booking.arrival_date} {booking.arrival_time}."
+        )
+        if booking.pickup_airport_terminal:
+            detail += f" Pickup point: {booking.pickup_airport_terminal}."
+
+        # The night surcharge depends on the hour, so the fare is re-checked.
+        old_total = booking.total_amount
+        try:
+            breakdown = _calculate_fare(
+                distance_km=float(booking.distance_km or 0),
+                num_adults=booking.num_adults,
+                baby_car_seater=booking.baby_car_seater,
+                num_kids_carried=booking.num_kids_carried,
+                luggage_count=booking.luggage_count,
+                hand_luggage_count=booking.hand_luggage_count,
+                pickup_time=booking.pickup_time,
+                stops=booking.stops_json or [],
+                is_return_trip=booking.is_return_trip,
+                return_time=booking.return_time,
+                return_distance_km=float(booking.return_distance_km) if booking.return_distance_km else None,
+            )
+            booking.price_breakdown = breakdown
+            booking.total_amount = Decimal(str(breakdown['total']))
+            if booking.total_amount != old_total:
+                detail += f" Fare updated from ${old_total} to ${booking.total_amount}."
+        except Exception:
+            logger.exception('Could not re-price booking %s after a flight change', booking.id)
+
+        booking.log_change('flight_updated', detail)
+        booking.save()
+
+        try:
+            EmailService.send_booking_rescheduled(booking, detail)
+        except Exception:
+            logger.exception('Failed to send flight update emails for booking %s', booking.id)
+
+        message = 'Thank you — we have your new flight details and the driver will meet that flight.'
+        if booking.total_amount != old_total:
+            message += f' Your fare is now ${booking.total_amount}.'
+
+        return render(request, self.template_name, self._context(
+            request, booking, token=token, success_message=message,
         ))
 
     # -------------------------------------------------------------- reschedule
@@ -2315,6 +2516,7 @@ class ManageBookingView(View):
                 stops=booking.stops_json or [],
                 is_return_trip=booking.is_return_trip,
                 return_time=booking.return_time,
+                return_distance_km=float(booking.return_distance_km) if booking.return_distance_km else None,
             )
             booking.price_breakdown = breakdown
             booking.total_amount = Decimal(str(breakdown['total']))

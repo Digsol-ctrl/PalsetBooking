@@ -27,12 +27,12 @@
           </div>
           <div class="col-sm-6">
             <div style="font-size:11px;color:#9ca3af;font-weight:700;text-transform:uppercase;letter-spacing:.5px">Pickup</div>
-            <div style="font-size:14px;color:#374151;margin-top:4px">{{ booking.pickup_address }}</div>
+            <div style="font-size:14px;color:#374151;margin-top:4px">{{ booking.pickup_display }}</div>
             {% if booking.pickup_date %}<div style="font-size:12px;color:#6b7280">{{ booking.pickup_date }} at {{ booking.pickup_time }}</div>{% endif %}
           </div>
           <div class="col-sm-6">
             <div style="font-size:11px;color:#9ca3af;font-weight:700;text-transform:uppercase;letter-spacing:.5px">Dropoff</div>
-            <div style="font-size:14px;color:#374151;margin-top:4px">{{ booking.dropoff_address }}</div>
+            <div style="font-size:14px;color:#374151;margin-top:4px">{{ booking.dropoff_display }}</div>
           </div>
           <div class="col-sm-6">
             <div style="font-size:11px;color:#9ca3af;font-weight:700;text-transform:uppercase;letter-spacing:.5px">Distance</div>
@@ -80,6 +80,14 @@
               <i class="bi bi-arrow-left-right me-1"></i>{{ booking.return_date }} at {{ booking.return_time }}
               {% if booking.price_breakdown.return_leg_fee %}&mdash; ${{ booking.price_breakdown.return_leg_fee|floatformat:2 }}{% endif %}
             </div>
+            {% if booking.return_uses_different_points %}
+            <div style="font-size:12px;color:#6b7280;margin-top:4px">
+              Different route: {{ booking.return_pickup_display }} &rarr; {{ booking.return_dropoff_display }}
+              {% if booking.return_distance_km %}({{ booking.return_distance_km }} km){% endif %}
+            </div>
+            {% else %}
+            <div style="font-size:12px;color:#6b7280;margin-top:4px">Same trip in reverse</div>
+            {% endif %}
           </div>
           {% endif %}
           {% if booking.price_breakdown.night_surcharge %}
@@ -146,6 +154,36 @@
             <div style="font-size:11px;color:#9ca3af;font-weight:700;text-transform:uppercase">Arrival</div>
             <div style="font-size:14px;color:#374151;margin-top:4px">{{ booking.arrival_date }} {{ booking.arrival_time }}</div>
           </div>
+          <div class="col-sm-4">
+            <div style="font-size:11px;color:#9ca3af;font-weight:700;text-transform:uppercase">Collection Point</div>
+            <div style="font-size:14px;color:#374151;margin-top:4px">{{ booking.pickup_airport_terminal|default:"—" }}</div>
+          </div>
+          {% if booking.flight_departure_airport %}
+          <div class="col-sm-4">
+            <div style="font-size:11px;color:#9ca3af;font-weight:700;text-transform:uppercase">Departing From</div>
+            <div style="font-size:14px;color:#374151;margin-top:4px">{{ booking.flight_departure_airport }}</div>
+          </div>
+          {% endif %}
+          {% if booking.flight_connection_details %}
+          <div class="col-sm-4">
+            <div style="font-size:11px;color:#9ca3af;font-weight:700;text-transform:uppercase">Connection</div>
+            <div style="font-size:14px;color:#374151;margin-top:4px">{{ booking.flight_connection_details }}</div>
+          </div>
+          {% endif %}
+          {% if booking.flight_notes %}
+          <div class="col-12">
+            <div style="font-size:11px;color:#9ca3af;font-weight:700;text-transform:uppercase">Flight Notes</div>
+            <div style="font-size:14px;color:#374151;margin-top:4px">{{ booking.flight_notes }}</div>
+          </div>
+          {% endif %}
+          {% if booking.flight_details_updated_at %}
+          <div class="col-12">
+            <div style="font-size:13px;color:#b45309;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:8px 12px">
+              <i class="bi bi-airplane-engines me-1"></i>
+              The customer updated these flight details on {{ booking.flight_details_updated_at|date:"d M Y, H:i" }}.
+            </div>
+          </div>
+          {% endif %}
         </div>
       </div>
     </div>

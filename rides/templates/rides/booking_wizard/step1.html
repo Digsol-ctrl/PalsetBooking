@@ -39,6 +39,14 @@
         {% endif %}
     </div>
 
+    <div class="form-group">
+        <label for="pickup_point_detail" class="form-label">
+            <i class="bi bi-signpost-split"></i> Exact pickup point <span style="font-weight:400;color:#6b7280;">(optional)</span>
+        </label>
+        {{ form.pickup_point_detail }}
+        <small class="form-text text-muted">Big places have many entrances &mdash; tell us where to wait, e.g. &ldquo;outside Gate 2, by the coffee kiosk&rdquo;.</small>
+    </div>
+
     <!-- Hidden pickup coordinates -->
     <input type="hidden" id="pickup_latitude" name="pickup_latitude" value="{{ step1_data.pickup_latitude|default:'' }}">
     <input type="hidden" id="pickup_longitude" name="pickup_longitude" value="{{ step1_data.pickup_longitude|default:'' }}">
@@ -54,6 +62,13 @@
                 {% for error in form.dropoff_address.errors %}{{ error }}{% endfor %}
             </div>
         {% endif %}
+    </div>
+
+    <div class="form-group">
+        <label for="dropoff_point_detail" class="form-label">
+            <i class="bi bi-signpost"></i> Exact drop-off point <span style="font-weight:400;color:#6b7280;">(optional)</span>
+        </label>
+        {{ form.dropoff_point_detail }}
     </div>
 
     <!-- Hidden dropoff coordinates -->
@@ -113,6 +128,23 @@
 
     <div id="airport_fields" style="display: none; margin-top:12px;">
         <div class="form-group">
+            <label class="form-label">Which part of the airport are we collecting you from?</label>
+            <div style="display:grid;gap:8px;margin-top:6px;">
+                {% for choice in form.pickup_airport_terminal %}
+                <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;cursor:pointer;margin:0;">
+                    {{ choice.tag }}
+                    <span>{{ choice.choice_label }}</span>
+                </label>
+                {% endfor %}
+            </div>
+            <small class="form-text text-muted">An airport name on its own doesn&rsquo;t tell the driver which side to wait at.</small>
+            {% if form.pickup_airport_terminal.errors %}
+                <div class="error-message" style="margin-top: 8px;">
+                    {% for error in form.pickup_airport_terminal.errors %}{{ error }}{% endfor %}
+                </div>
+            {% endif %}
+        </div>
+        <div class="form-group">
             <label for="id_arrival_airline">Airline</label>
             {{ form.arrival_airline }}
             <!-- <small class="form-text text-muted">Example: Airlink, Emirates</small> -->
@@ -125,6 +157,29 @@
         <div class="form-row" style="display:flex; gap:12px;">
             <div style="flex:1">{{ form.arrival_date }}<small class="form-text text-muted">Arrival date</small>{% if form.arrival_date.errors %}<div class="error-message" style="margin-top: 8px;">{% for error in form.arrival_date.errors %}{{ error }}{% endfor %}</div>{% endif %}</div>
             <div style="flex:1">{{ form.arrival_time }}<small class="form-text text-muted">Arrival time</small>{% if form.arrival_time.errors %}<div class="error-message" style="margin-top: 8px;">{% for error in form.arrival_time.errors %}{{ error }}{% endfor %}</div>{% endif %}</div>
+        </div>
+
+        <button type="button" id="more_flight_details_btn" class="location-btn" style="margin-top:12px;">
+            <i class="bi bi-plus-circle"></i> Add more flight details
+        </button>
+
+        <div id="more_flight_fields" style="display:none;margin-top:12px;padding:14px 16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;">
+            <div style="font-size:13px;color:#475569;margin-bottom:12px;">
+                Useful if you are connecting through another airport, or if your flight may still change.
+                You can also correct these details later from the link in your confirmation email.
+            </div>
+            <div class="form-group">
+                <label for="id_flight_departure_airport">Departing from</label>
+                {{ form.flight_departure_airport }}
+            </div>
+            <div class="form-group">
+                <label for="id_flight_connection_details">Connecting flight</label>
+                {{ form.flight_connection_details }}
+            </div>
+            <div class="form-group" style="margin-bottom:0;">
+                <label for="id_flight_notes">Anything else about your flight</label>
+                {{ form.flight_notes }}
+            </div>
         </div>
     </div>
 
@@ -153,9 +208,46 @@
                     {{ form.return_time }}
                 </div>
             </div>
+            <div style="margin-top:14px;padding-top:14px;border-top:1px dashed #86efac;">
+                <label for="return_use_different_points" style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin:0;">
+                    {{ form.return_use_different_points }}
+                    <span>
+                        <span style="font-weight:700;color:#065f46;display:block;">Collect me somewhere else on the way back</span>
+                        <span style="font-size:13px;color:#047857;">
+                            By default we simply reverse the trip. Tick this if the return journey starts
+                            or ends somewhere different.
+                        </span>
+                    </span>
+                </label>
+
+                <div id="return_route_fields" style="display:none;margin-top:12px;">
+                    <div class="form-group">
+                        <label for="return_pickup_address" class="form-label">Return pickup location</label>
+                        {{ form.return_pickup_address }}
+                        {{ form.return_pickup_point_detail }}
+                    </div>
+                    <div class="form-group">
+                        <label for="return_dropoff_address" class="form-label">Return drop-off location</label>
+                        {{ form.return_dropoff_address }}
+                        {{ form.return_dropoff_point_detail }}
+                    </div>
+                    <div id="return_distance_note" style="display:none;font-size:13px;color:#047857;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;padding:10px 12px;">
+                        Return journey measured at <strong><span id="return_distance_display">-</span> km</strong> &mdash;
+                        this leg is priced on its own route.
+                    </div>
+                </div>
+            </div>
+
+            {{ form.return_pickup_latitude }}
+            {{ form.return_pickup_longitude }}
+            {{ form.return_dropoff_latitude }}
+            {{ form.return_dropoff_longitude }}
+            {{ form.return_distance_km }}
+
             <div style="font-size:12px;color:#047857;margin-top:8px;">
                 The return leg is charged the same as the outbound trip{% if return_discount_percent %},
                 less your {{ return_discount_percent|floatformat:"-2" }}% round-trip discount{% endif %}.
+                A return on a different route is charged on that route instead.
             </div>
             {% if form.return_date.errors or form.return_time.errors %}
             <div class="error-message" style="margin-top:8px;">
@@ -278,6 +370,76 @@
                 validateStep1();
             }
         });
+
+        // The return leg can start and end somewhere else entirely, so it gets its
+        // own pair of lookups and its own measured distance.
+        bindReturnAutocomplete('return_pickup_address', 'return_pickup_latitude', 'return_pickup_longitude');
+        bindReturnAutocomplete('return_dropoff_address', 'return_dropoff_latitude', 'return_dropoff_longitude');
+    }
+
+    function bindReturnAutocomplete(inputId, latId, lngId) {
+        const input = document.getElementById(inputId);
+        if (!input) return;
+        const autocomplete = new google.maps.places.Autocomplete(input, {
+            componentRestrictions: { country: 'zw' },
+            fields: ['geometry', 'formatted_address', 'place_id'],
+        });
+        autocomplete.addListener('place_changed', () => {
+            const place = autocomplete.getPlace();
+            if (place.geometry) {
+                document.getElementById(latId).value = place.geometry.location.lat();
+                document.getElementById(lngId).value = place.geometry.location.lng();
+                measureReturnLeg();
+                validateStep1();
+            }
+        });
+        // Typing over a chosen place invalidates the coordinates behind it
+        input.addEventListener('input', () => {
+            document.getElementById(latId).value = '';
+            document.getElementById(lngId).value = '';
+            document.getElementById('return_distance_km').value = '';
+            document.getElementById('return_distance_note').style.display = 'none';
+            validateStep1();
+        });
+    }
+
+    function returnRouteIsSeparate() {
+        const differentPoints = document.getElementById('return_use_different_points');
+        const returnCheckbox = document.getElementById('is_return_trip');
+        return !!(returnCheckbox && returnCheckbox.checked && differentPoints && differentPoints.checked);
+    }
+
+    function measureReturnLeg() {
+        if (!returnRouteIsSeparate()) return;
+        const pLat = document.getElementById('return_pickup_latitude').value;
+        const pLng = document.getElementById('return_pickup_longitude').value;
+        const dLat = document.getElementById('return_dropoff_latitude').value;
+        const dLng = document.getElementById('return_dropoff_longitude').value;
+        if (!pLat || !pLng || !dLat || !dLng) return;
+
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+        fetch('/api/distance-fare/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+            body: JSON.stringify({
+                pickup_latitude: pLat, pickup_longitude: pLng,
+                dropoff_latitude: dLat, dropoff_longitude: dLng,
+                num_adults: 1,
+            }),
+        })
+        .then(r => r.json())
+        .then(data => {
+            const dist = parseFloat(data.distance_km) || 0;
+            document.getElementById('return_distance_km').value = dist > 0 ? dist.toFixed(2) : '';
+            const note = document.getElementById('return_distance_note');
+            if (dist > 0) {
+                document.getElementById('return_distance_display').textContent = dist.toFixed(1);
+                note.style.display = 'block';
+            } else {
+                note.style.display = 'none';
+            }
+        })
+        .catch(() => {});
     }
 
     function updateMap() {
@@ -472,6 +634,23 @@
             }
         }
 
+        // A separate return route needs both ends chosen from the suggestions.
+        if (returnValid && returnRouteIsSeparate()) {
+            const coords = ['return_pickup_latitude', 'return_pickup_longitude',
+                            'return_dropoff_latitude', 'return_dropoff_longitude']
+                .map(id => (document.getElementById(id) || {}).value);
+            if (!coords.every(Boolean)) {
+                returnValid = false;
+                showScheduleError('Please choose the return pickup and drop-off locations from the suggestions.');
+            }
+        }
+
+        // Airport pickups need a terminal - international and domestic are far apart.
+        if (airportValid && airportCheckbox && airportCheckbox.checked) {
+            const terminalChosen = document.querySelector('input[name="pickup_airport_terminal"]:checked');
+            if (!terminalChosen) airportValid = false;
+        }
+
         const isValid = baseValid && airportValid && scheduleValid && returnValid;
         document.getElementById('next_btn').disabled = !isValid;
 
@@ -570,10 +749,51 @@
             }
             validateStep1();
         }
-        if (returnCheckbox) {
-            returnCheckbox.addEventListener('change', toggleReturnFields);
-            toggleReturnFields();
+        // Separate return route toggle
+        const differentPointsCheckbox = document.getElementById('return_use_different_points');
+        const returnRouteFields = document.getElementById('return_route_fields');
+        function toggleReturnRouteFields() {
+            if (returnRouteFields) {
+                returnRouteFields.style.display = returnRouteIsSeparate() ? 'block' : 'none';
+            }
+            if (returnRouteIsSeparate()) {
+                measureReturnLeg();
+            }
+            validateStep1();
         }
+        if (differentPointsCheckbox) {
+            differentPointsCheckbox.addEventListener('change', toggleReturnRouteFields);
+        }
+        if (returnCheckbox) {
+            returnCheckbox.addEventListener('change', () => {
+                toggleReturnFields();
+                toggleReturnRouteFields();
+            });
+            toggleReturnFields();
+            toggleReturnRouteFields();
+        }
+
+        // Extra flight details, revealed on request
+        const moreFlightBtn = document.getElementById('more_flight_details_btn');
+        const moreFlightFields = document.getElementById('more_flight_fields');
+        if (moreFlightBtn && moreFlightFields) {
+            // Keep it open when the customer already filled something in
+            const prefilled = ['id_flight_departure_airport', 'id_flight_connection_details', 'id_flight_notes']
+                .some(id => ((document.getElementById(id) || {}).value || '').trim().length > 0);
+            if (prefilled) moreFlightFields.style.display = 'block';
+            moreFlightBtn.addEventListener('click', () => {
+                const open = moreFlightFields.style.display === 'block';
+                moreFlightFields.style.display = open ? 'none' : 'block';
+                moreFlightBtn.innerHTML = open
+                    ? '<i class="bi bi-plus-circle"></i> Add more flight details'
+                    : '<i class="bi bi-dash-circle"></i> Hide extra flight details';
+            });
+        }
+
+        // Terminal choice gates the Next button on airport pickups
+        document.querySelectorAll('input[name="pickup_airport_terminal"]').forEach((el) => {
+            el.addEventListener('change', validateStep1);
+        });
         // Check if Maps loaded successfully
         setTimeout(() => {
             if (!map) {

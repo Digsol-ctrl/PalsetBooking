@@ -456,6 +456,7 @@ class DashboardSettingsView(View):
             'last_bracket_max': last_bracket_max,
             'chauffeur_packages': chauffeur_packages,
             'stop_tiers': site_settings.get_stop_tiers(),
+            'airport_terminals': site_settings.get_airport_terminals(),
             'ld_default_threshold': DEFAULT_LONG_DISTANCE['THRESHOLD_KM'],
             'ld_default_per_km': DEFAULT_LONG_DISTANCE['PER_KM'],
             'ld_default_base_pax': DEFAULT_LONG_DISTANCE['BASE_PASSENGERS'],
@@ -513,6 +514,7 @@ class DashboardSettingsView(View):
             try:
                 site_settings.allow_customer_reschedule = bool(request.POST.get('allow_customer_reschedule'))
                 site_settings.allow_customer_cancellation = bool(request.POST.get('allow_customer_cancellation'))
+                site_settings.allow_customer_flight_update = bool(request.POST.get('allow_customer_flight_update'))
                 site_settings.booking_change_cutoff_hours = int(request.POST.get('booking_change_cutoff_hours', 12) or 0)
                 site_settings.save()
                 messages.success(request, 'Customer self-service settings updated successfully.')
@@ -551,6 +553,20 @@ class DashboardSettingsView(View):
                 messages.success(request, 'Stop charges updated successfully.')
             except (ValueError, TypeError) as e:
                 messages.error(request, f'Invalid stop charge value: {e}')
+
+        elif form_type == 'airport_terminals':
+            # Blank rows are dropped, and duplicates would only confuse the customer.
+            terminals = []
+            for value in request.POST.getlist('airport_terminal'):
+                label = (value or '').strip()[:64]
+                if label and label not in terminals:
+                    terminals.append(label)
+            if not terminals:
+                messages.error(request, 'Please keep at least one airport collection point.')
+            else:
+                site_settings.airport_terminals = terminals
+                site_settings.save()
+                messages.success(request, 'Airport collection points updated successfully.')
 
         elif form_type == 'booking_rules':
             try:
