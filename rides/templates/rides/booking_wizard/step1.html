@@ -39,14 +39,6 @@
         {% endif %}
     </div>
 
-    <div class="form-group">
-        <label for="pickup_point_detail" class="form-label">
-            <i class="bi bi-signpost-split"></i> Exact pickup point <span style="font-weight:400;color:#6b7280;">(optional)</span>
-        </label>
-        {{ form.pickup_point_detail }}
-        <small class="form-text text-muted">Big places have many entrances &mdash; tell us where to wait, e.g. &ldquo;outside Gate 2, by the coffee kiosk&rdquo;.</small>
-    </div>
-
     <!-- Hidden pickup coordinates -->
     <input type="hidden" id="pickup_latitude" name="pickup_latitude" value="{{ step1_data.pickup_latitude|default:'' }}">
     <input type="hidden" id="pickup_longitude" name="pickup_longitude" value="{{ step1_data.pickup_longitude|default:'' }}">
@@ -64,13 +56,6 @@
         {% endif %}
     </div>
 
-    <div class="form-group">
-        <label for="dropoff_point_detail" class="form-label">
-            <i class="bi bi-signpost"></i> Exact drop-off point <span style="font-weight:400;color:#6b7280;">(optional)</span>
-        </label>
-        {{ form.dropoff_point_detail }}
-    </div>
-
     <!-- Hidden dropoff coordinates -->
     <input type="hidden" id="dropoff_latitude" name="dropoff_latitude" value="{{ step1_data.dropoff_latitude|default:'' }}">
     <input type="hidden" id="dropoff_longitude" name="dropoff_longitude" value="{{ step1_data.dropoff_longitude|default:'' }}">
@@ -83,50 +68,60 @@
       <div style="font-size:13px;">Your route is <strong><span id="ld_distance_display">-</span> km</strong> — trips of <strong id="ld_threshold_display">80</strong> km or more are priced at the long distance flat rate ($1.40/km, up to 3 passengers). You can continue booking normally.</div>
     </div>
 
-    <div style="margin-top:14px;">
-        <label for="pickup_is_airport" class="form-label" style="display:block;">
-            <div style="display:flex; align-items:center; justify-content:space-between; padding:12px; border:2px solid #d1fae5; background:#ecfdf5; border-radius:8px;">
-                <div style="display:flex; gap:12px; align-items:center;">
-                    <div style="width:42px; height:42px; background:#a7f3d0; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:20px; color:#10b981;">
-                        <i class="bi bi-airplane-fill"></i>
+    <div id="pickup_schedule_fields">
+        <div class="form-row" style="display:flex; gap:12px;">
+            <div class="form-group" style="flex:1">
+                <label for="pickup_date" class="form-label">Pickup Date</label>
+                {{ form.pickup_date }}
+                {% if form.pickup_date.errors %}
+                    <div class="error-message" style="margin-top: 8px;">
+                        {% for error in form.pickup_date.errors %}{{ error }}{% endfor %}
                     </div>
-                    <div>
-                        <div style="font-weight:700; color:#065f46;">Pickup is from an airport</div>
-                        <div style="font-size:13px; color:#4b5563;">Check this if you're arriving by flight - we'll ask for airline & flight number. Arrival date/time will be used as your pickup schedule.</div>
-                    </div>
-                </div>
-                <div style="flex:0 0 auto; margin-left:16px;">
-                    <span style="font-size:18px;">
-                        {{ form.pickup_is_airport }}
-                    </span>
-                </div>
+                {% endif %}
             </div>
+            <div class="form-group" style="flex:1">
+                <label for="pickup_time" class="form-label">Pickup Time</label>
+                {{ form.pickup_time }}
+                {% if form.pickup_time.errors %}
+                    <div class="error-message" style="margin-top: 8px;">
+                        {% for error in form.pickup_time.errors %}{{ error }}{% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Optional extras: collapsed by default so step 1 opens short -->
+    <div class="option-row" id="points_option">
+        <button type="button" class="option-row-head" id="points_toggle" aria-expanded="false" aria-controls="point_detail_fields">
+            <i class="bi bi-signpost-split"></i>
+            <span class="option-row-label">Exact pickup &amp; drop-off points <span class="option-row-hint">optional</span></span>
+            <i class="bi bi-chevron-down" id="points_chevron"></i>
+        </button>
+
+        <div id="point_detail_fields" class="option-row-body" style="display:none;">
+            <div class="option-row-note">
+                Big places have many entrances &mdash; tell us where to wait, e.g. &ldquo;outside Gate 2, by the coffee kiosk&rdquo;.
+            </div>
+            <div class="form-group">
+                <label for="pickup_point_detail" class="form-label">Exact pickup point</label>
+                {{ form.pickup_point_detail }}
+            </div>
+            <div class="form-group">
+                <label for="dropoff_point_detail" class="form-label">Exact drop-off point</label>
+                {{ form.dropoff_point_detail }}
+            </div>
+        </div>
+    </div>
+
+    <div class="option-row" id="airport_option">
+        <label class="option-row-head" for="pickup_is_airport">
+            <i class="bi bi-airplane-fill"></i>
+            <span class="option-row-label">Airport pickup <span class="option-row-hint">your flight arrival becomes the pickup time</span></span>
+            {{ form.pickup_is_airport }}
         </label>
-    </div>
 
-    <div id="pickup_schedule_fields" style="margin-top:12px;">
-        <div class="form-group" style="margin-bottom:8px;">
-            <label for="pickup_date" class="form-label">Pickup Date</label>
-            {{ form.pickup_date }}
-            {% if form.pickup_date.errors %}
-                <div class="error-message" style="margin-top: 8px;">
-                    {% for error in form.pickup_date.errors %}{{ error }}{% endfor %}
-                </div>
-            {% endif %}
-        </div>
-        <div class="form-group">
-            <label for="pickup_time" class="form-label">Pickup Time</label>
-            {{ form.pickup_time }}
-            {% if form.pickup_time.errors %}
-                <div class="error-message" style="margin-top: 8px;">
-                    {% for error in form.pickup_time.errors %}{{ error }}{% endfor %}
-                </div>
-            {% endif %}
-        </div>
-    </div>
-
-
-    <div id="airport_fields" style="display: none; margin-top:12px;">
+        <div id="airport_fields" class="option-row-body" style="display: none;">
         <div class="form-group">
             <label class="form-label">Which part of the airport are we collecting you from?</label>
             <div style="display:grid;gap:8px;margin-top:6px;">
@@ -183,21 +178,16 @@
         </div>
     </div>
 
-    <!-- Return Trip -->
-    <div style="margin-top:16px;padding:14px 16px;background:#f0fdf4;border:2px solid #86efac;border-radius:10px;">
-        <label for="is_return_trip" style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin:0;">
+    </div>
+
+    <div class="option-row" id="return_option">
+        <label class="option-row-head" for="is_return_trip">
+            <i class="bi bi-arrow-left-right"></i>
+            <span class="option-row-label">Return trip <span class="option-row-hint">one booking, there and back</span></span>
             {{ form.is_return_trip }}
-            <span>
-                <span style="font-weight:700;color:#065f46;display:block;">
-                    <i class="bi bi-arrow-left-right"></i> Book a return trip
-                </span>
-                <span style="font-size:13px;color:#047857;">
-                    One booking for the journey there and back &mdash; we&rsquo;ll collect you again at the time you choose.
-                </span>
-            </span>
         </label>
 
-        <div id="return_fields" style="display:none;margin-top:14px;">
+        <div id="return_fields" class="option-row-body" style="display:none;">
             <div class="form-row" style="display:flex;gap:12px;">
                 <div style="flex:1">
                     <label for="return_date" class="form-label">Return Date</label>
@@ -548,12 +538,66 @@
         return scheduled.getTime() >= Date.now();
     }
 
+    // Each date input and the time input it schedules.
+    const SCHEDULE_PAIRS = [
+        ['pickup_date', 'pickup_time'],
+        ['id_arrival_date', 'id_arrival_time'],
+        ['return_date', 'return_time'],
+    ];
+
+    function localNowHHMM() {
+        const now = new Date();
+        return String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+    }
+
     function applyMinDates() {
         const today = localTodayISO();
-        ['pickup_date', 'id_arrival_date', 'return_date'].forEach(id => {
-            const el = document.getElementById(id);
+        SCHEDULE_PAIRS.forEach(([dateId]) => {
+            const el = document.getElementById(dateId);
             if (el) el.setAttribute('min', today);
         });
+
+        // The return leg can never start before the outbound one.
+        const airportChecked = (document.getElementById('pickup_is_airport') || {}).checked;
+        const outboundDate = document.getElementById(airportChecked ? 'id_arrival_date' : 'pickup_date');
+        const returnDate = document.getElementById('return_date');
+        if (returnDate && outboundDate && outboundDate.value) {
+            returnDate.setAttribute('min', outboundDate.value);
+        }
+    }
+
+    // On today's date the time picker must start at the current minute.
+    function applyMinTimes() {
+        const today = localTodayISO();
+        const nowHHMM = localNowHHMM();
+        SCHEDULE_PAIRS.forEach(([dateId, timeId]) => {
+            const dateEl = document.getElementById(dateId);
+            const timeEl = document.getElementById(timeId);
+            if (!dateEl || !timeEl) return;
+            if (dateEl.value === today) {
+                timeEl.setAttribute('min', nowHHMM);
+            } else {
+                timeEl.removeAttribute('min');
+            }
+        });
+    }
+
+    // `min` alone does not stop a browser accepting a typed-in past time, so a
+    // lapsed selection is pulled forward to the earliest minute we can collect.
+    function enforceFutureTimes() {
+        const today = localTodayISO();
+        const earliest = localNowHHMM();
+        let corrected = false;
+        SCHEDULE_PAIRS.forEach(([dateId, timeId]) => {
+            const dateEl = document.getElementById(dateId);
+            const timeEl = document.getElementById(timeId);
+            if (!dateEl || !timeEl || !timeEl.value) return;
+            if (dateEl.value === today && timeEl.value < earliest) {
+                timeEl.value = earliest;
+                corrected = true;
+            }
+        });
+        return corrected;
     }
 
     function showScheduleError(message) {
@@ -568,6 +612,9 @@
     }
 
     function validateStep1() {
+        applyMinDates();
+        applyMinTimes();
+        const timeCorrected = enforceFutureTimes();
         const pickupLat = document.getElementById('pickup_latitude').value;
         const pickupLng = document.getElementById('pickup_longitude').value;
         const dropoffLat = document.getElementById('dropoff_latitude').value;
@@ -654,6 +701,12 @@
         const isValid = baseValid && airportValid && scheduleValid && returnValid;
         document.getElementById('next_btn').disabled = !isValid;
 
+        // A lapsed time was pulled forward - tell the customer rather than
+        // changing their booking behind their back.
+        if (timeCorrected && isValid) {
+            showScheduleError('That time had already passed, so we moved it to the earliest we can collect you.');
+        }
+
         if (isValid) {
             document.getElementById('step1_info').style.display = 'none';
         }
@@ -726,14 +779,12 @@
         const airportCheckbox = document.getElementById('pickup_is_airport');
         const airportFields = document.getElementById('airport_fields');
         const pickupScheduleFields = document.getElementById('pickup_schedule_fields');
+        const airportOption = document.getElementById('airport_option');
         function toggleAirportFields() {
-            if (airportCheckbox && airportCheckbox.checked) {
-                airportFields.style.display = 'block';
-                if (pickupScheduleFields) pickupScheduleFields.style.display = 'none';
-            } else {
-                airportFields.style.display = 'none';
-                if (pickupScheduleFields) pickupScheduleFields.style.display = 'block';
-            }
+            const on = !!(airportCheckbox && airportCheckbox.checked);
+            airportFields.style.display = on ? 'block' : 'none';
+            if (pickupScheduleFields) pickupScheduleFields.style.display = on ? 'none' : 'block';
+            if (airportOption) airportOption.classList.toggle('is-open', on);
             validateStep1();
         }
         if (airportCheckbox) {
@@ -743,10 +794,11 @@
         // Return trip toggle
         const returnCheckbox = document.getElementById('is_return_trip');
         const returnFields = document.getElementById('return_fields');
+        const returnOption = document.getElementById('return_option');
         function toggleReturnFields() {
-            if (returnFields) {
-                returnFields.style.display = (returnCheckbox && returnCheckbox.checked) ? 'block' : 'none';
-            }
+            const on = !!(returnCheckbox && returnCheckbox.checked);
+            if (returnFields) returnFields.style.display = on ? 'block' : 'none';
+            if (returnOption) returnOption.classList.toggle('is-open', on);
             validateStep1();
         }
         // Separate return route toggle
@@ -771,6 +823,27 @@
             });
             toggleReturnFields();
             toggleReturnRouteFields();
+        }
+
+        // Exact pickup / drop-off points, collapsed until asked for
+        const pointsToggle = document.getElementById('points_toggle');
+        const pointFields = document.getElementById('point_detail_fields');
+        const pointsOption = document.getElementById('points_option');
+        const pointsChevron = document.getElementById('points_chevron');
+        if (pointsToggle && pointFields) {
+            const setPointsOpen = (open) => {
+                pointFields.style.display = open ? 'block' : 'none';
+                pointsToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+                if (pointsOption) pointsOption.classList.toggle('is-open', open);
+                if (pointsChevron) pointsChevron.className = open ? 'bi bi-chevron-up' : 'bi bi-chevron-down';
+            };
+            // Keep it open when the customer (or a saved booking) already filled one in
+            const prefilled = ['pickup_point_detail', 'dropoff_point_detail']
+                .some(id => ((document.getElementById(id) || {}).value || '').trim().length > 0);
+            setPointsOpen(prefilled);
+            pointsToggle.addEventListener('click', () => {
+                setPointsOpen(pointFields.style.display !== 'block');
+            });
         }
 
         // Extra flight details, revealed on request

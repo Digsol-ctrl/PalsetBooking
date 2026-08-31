@@ -298,14 +298,49 @@
 {% endif %}
 
 <script>
-  // Never offer a date already in the past
+  // Never offer a date or a time already in the past
   (function () {
-    const now = new Date();
-    const today = new Date(now - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-    ['new_pickup_date', 'new_return_date'].forEach(function (id) {
-      const el = document.getElementById(id);
-      if (el) el.setAttribute('min', today);
+    const pairs = [
+      ['new_pickup_date', 'new_pickup_time'],
+      ['new_return_date', 'new_return_time'],
+    ];
+
+    function todayISO() {
+      const now = new Date();
+      return new Date(now - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    }
+
+    function nowHHMM() {
+      const now = new Date();
+      return String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+    }
+
+    function applyMins() {
+      const today = todayISO();
+      const earliest = nowHHMM();
+      pairs.forEach(function (pair) {
+        const dateEl = document.getElementById(pair[0]);
+        const timeEl = document.getElementById(pair[1]);
+        if (dateEl) dateEl.setAttribute('min', today);
+        if (!dateEl || !timeEl) return;
+        // Only today needs a floor on the time; any later date is fully open.
+        if (dateEl.value === today) {
+          timeEl.setAttribute('min', earliest);
+          // `min` does not stop a typed-in past time, so pull it forward.
+          if (timeEl.value && timeEl.value < earliest) timeEl.value = earliest;
+        } else {
+          timeEl.removeAttribute('min');
+        }
+      });
+    }
+
+    pairs.forEach(function (pair) {
+      const dateEl = document.getElementById(pair[0]);
+      const timeEl = document.getElementById(pair[1]);
+      if (dateEl) dateEl.addEventListener('change', applyMins);
+      if (timeEl) timeEl.addEventListener('change', applyMins);
     });
+    applyMins();
   })();
 </script>
 
